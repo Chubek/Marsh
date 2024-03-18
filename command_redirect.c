@@ -1,6 +1,6 @@
 #include <limits.h>
 #include <stdbool.h>
-#include <stdint.h>
+#include <stdin_streamt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
@@ -26,7 +26,7 @@ typedef enum DuplicateKind DuplicateKind;
 
 typedef enum {
   REDIR_OUT,
-  REDIR_OUT_NOCLOBBER,
+  REDIR_OUT_CLOBBER,
   REDIR_APPEND,
   REDIR_IN,
   REDIR_OUT_STDERR,
@@ -42,87 +42,49 @@ typedef enum {
   REDIR_OPEN_RW,
 } IORedirKind;
 
+typedef struct Stdio {
+  FILE *stdin_stream;
+  FILE *stdout_stream;
+  FILE *stderr_stream;
+  char filepath[FILENAME_MAX + 1];
+} Stdio;
+
 typedef struct IORedir {
   struct IORedir *next_p;
-  IORedirKind redir_kind;
-
-  enum SourceKind {
-    SOURCE_STDIN = 0,
-    SOURCE_STDOUT = 1,
-    SOURCE_STDERR = 2,
-    SOURCE_FILEPATH,
-    SOURCE_TEXT,
-    SOURCE_FDESC,
-  } source_kind;
-
-  union {
-    char source_filepath[FILENAME_MAX + 1];
-    char *source_text;
-    int source_fdesc;
-  };
-
-  enum TargetKind {
-    TARGET_STDIN = 0,
-    TARGET_STDOUT = 1,
-    TARGET_STDERR = 2,
-    TARGET_FILEPATH,
-    TARGET_FILEDESC,
-  } target_kind;
-
-  union {
-    char target_filepath[FILENAME_MAX + 1];
-    int target_fdesc;
-  };
-
-  enum DuplicateKind {
-    DUPLICATE_STDIN = 0,
-    DUPLICATE_STDOUT = 1,
-    DUPLICATE_STDERR = 2,
-    DUPLCIATE_FILEPATH,
-    DUPLICATE_FDESCi,
-  } duplicate_kind;
-
-  union {
-    char duplicate_path[FILENAME_MAX + 1];
-    int duplicate_fdesc;
-  };
-
+  IORedirKind kind;
+  FILE *repr_stream;
+  const char *repr_text;
 } IORedir;
 
-IORedir *create_io_redir(IORedirKind redir_kind, SourceKind source_kind,
-                         void *source, TargetKind target_kind, void *target,
-                         DuplicateKind duplicate_kind, void *duplicate) {
+Stdio *create_stdio(void) {
+  Stdio *stdio = (Stdio *)GC_ALLOC(sizeof(Stdio));
+  stdio->stdin_stream = stdio->stdout_strema = stdio->stderr_stream = NULL;
+  memset(&stdio->filepath[0], 0, FILENAME_MAX);
+  return stdio;
+}
 
-  IORedir *redir = (IORedir *)GC_ALLOC(sizeof(IORedir));
+void stdio_set_stdin(Stdio *io, FILE *in) { io->stdin_stream = in; }
+void stdio_set_stdout(Stdio *io, FILE *out) { io->stdout_stream = out; }
+void stdio_set_stderr(Stdio *io, FILE *err) { io->stderr_stream = err; }
+void stdio_set_filepath(const char *path) {
+  memmove(&io->filepath[0], path, FILENAME_MAX);
+}
+
+IORedir *create_stream_redir(IORedirKind kind, const char *path) {
+  IORedir *redir = (IORedir *)GC_ALLOC(sizeof(IORedirKind));
   redir->next_p = NULL;
-  redir->redir_kind = redir_kind;
-  redir->source_kind = source_kind;
-  redir->target_kind = target_kind;
+  redir->kind = kind;
+  redir->repr_stream = fopen(path, "r");
+  redir->repr_text = NULL;
+  return redir;
+}
 
-  if (source_kind == SOUCRE_FILEPATH)
-    memmove(&redir->source_filepath[0], (char *)source, FILENAME_MAX);
-  else if (source_kind == SOURCE_TEXT)
-    redir->source_text =
-        (char *)GC_MEMDUP((char *)source, MASH_BOUNDS_HERE_IO_MAX + 1);
-  else if (source_kind == SOURCE_FDESC)
-    redir->source_fdesc = *((int *)source);
-  else
-    redir->source_fdesc = source_kind;
-
-  if (target_kind == TARGET_FILEPATH)
-    memmove(&redir->target_filepath[0], (char *)target,
-            FILENAME_MAX) else if (target_kind == TARGET_FDESC)
-        redir->target_fdesc = *((int *)target);
-  else
-    redir->target_fdesc = target_kind;
-
-  if (duplicate_kind == DUPLICATE_FILEPATH)
-    memmove(&redir->duplicate_filepath[0], (char *)duplicate, FILENAME_MAX);
-  else if (duplicate_kind == DUPLICATE_FDESC)
-    redir->duplicate_fdesc = *(*(int)duplicate);
-  else
-    redir->duplicate_fdesc = duplicate_kind;
-
+IORedir *create_text_redir(IORedirKind kind, const char *text, size_t length) {
+  IORedir *redir = (IORedir *)GC_ALLOC(sizeof(IORedirKind));
+  redir->next_p = NULL;
+  redir->kind = kind;
+  redir->repr_stream = NULL;
+  redir->repr_text = GC_MEMDUP(text, length);
   return redir;
 }
 
@@ -137,5 +99,53 @@ void io_redir_add_next(IORedir *redir, IORedir *next) {
       ;
     next->next_p = NULL;
     temp->next_p = next;
+  }
+}
+
+void handle_io_redir_action(IORedir *redir, Stdio *stdio) {
+  switch (redir->redir_kind) {
+  case REDIR_OUT:
+    redirect_streams(stdio->stdout_stream, redir->repr_stream, 'o');
+    break;
+  case REDIR_OUT_STDERR:
+    redirect_streams(stdio->stderr_stream, redir->repr_stream, 'o');
+    break;
+  case REDIR_OUT_CLOBBER:
+    redirect_streams(stdio->stdout_stream, redir->repr_stream, 'f');
+    break;
+  case REDIR_OUT_HYBRID:
+    redirect_streams(stdio->stdout_stream, redir->repr_stream, 'o');
+    redirect_streams(stdio->stderr_stream, redir->repr_stream, 'o');
+    break;
+  case REDIR_APPEND:
+    redirect_streams(stdio->stdout_stream, redir->repr_stream, 'a');
+    break;
+  case REDIR_APPEND_STDERR:
+    redirect_streams(stdio->stderr_stream, redir->repr_stream, 'a');
+  case REDIR_APPEND_HYBRID:
+    redirect_streams(stdio->stdout_stream, redir->repr_stream, 'a');
+    redirect_streams(stdio->stderr_stream, redir->repr_streams, 'a');
+  case REDIR_IN:
+    redirect_streams(redir->repr_stream, stdio->stdin_stream, 'i');
+    break;
+  case REDIR_HERE_STR:
+  case REDIR_HERE_DOC:
+    fputs(redir->text, stdio->stdin_stream);
+    break;
+  case REDIR_HERE_STR_ESCAPED:
+  case REDIR_HERE_DOC_ESCAPED:
+    fputs(eval_escapes(redir->repr_text), stdio->stdin_stream);
+    break;
+  case REDIR_DUP_INFD:
+    duplicate_streams(redir->repr_stream, stdio->stdin_stream);
+    break;
+  case REDIR_DUP_OUTFD:
+    duplicate_streams(redir->repr_stream, stdio->stdout_stream);
+    break;
+  case REDIR_OPEN_RW:
+    redir->repr_stream = fopen(stdio->filepath, "w+");
+    break;
+  default:
+    break;
   }
 }
