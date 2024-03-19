@@ -122,27 +122,27 @@ FRedir *create_redir_from_fdesc(RedirMode mode, int fdesc, bool duplicate) {
   return redir;
 }
 
-void init_redir(FRedir *redir) {
+void init_redir_and_insert(FDescTable *table, FRedir *redir) {
   switch (redir->mode) {
   case REDIR_IN:
-    redir->stream = 
-	    redir->fdesc == -1 ? fopen(&redir->path[0], "r")
+    redir->stream = redir->fdesc == -1 ? fopen(&redir->path[0], "r")
                                        : fdopen(redir->fdesc, "r");
+    insert_fdesc_into_table(table, redir->fdesc, IO_READ);
     break;
   case REDIR_OUT:
-    redir->stream = 
-	    redir->fdesc == -1 ? fopen(&redir->path[0], "w")
+    redir->stream = redir->fdesc == -1 ? fopen(&redir->path[0], "w")
                                        : fdopen(redir->fdesc, "w");
     break;
+    insert_fdesc_into_table(table, redir->fdesc, IO_WRITE);
   case REDIR_APPEND:
-    redir->stream = 
-	    redir->fdesc == -1 ? fopen(&redir->path[0], "a")
+    redir->stream = redir->fdesc == -1 ? fopen(&redir->path[0], "a")
                                        : fdopen(&redir->fdesc, "a");
+    insert_fdesc_into_table(table, redir->fdesc, IO_APPEND);
     break;
   case REDIR_RW:
-    redir->stream = 
-	    redir->fdesc == -1 ? fopen(&redir->path[0], "w+")
+    redir->stream = redir->fdesc == -1 ? fopen(&redir->path[0], "w+")
                                        : fdopen(&redir->fdesc, "w+");
+    insert_fdesc_into_table(table, redir->fdesc, IO_READ | IO_WRITE);
     break;
   default:
     break;
