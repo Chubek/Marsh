@@ -66,7 +66,7 @@ FDescTable *create_fdesc_table(void) {
   FDescTable *table = GC_ALLOC(sizeof(FDescTable));
 
   if (table == NULL) {
-    fprintf(stderr, "Memory allocation error\n");
+    fprintf(stderr, "create_fdesc_table: allocation failed\n");
     exit(EXIT_FAILURE);
   }
 
@@ -143,7 +143,7 @@ FRedir *create_redir_from_fdesc(RedirMode mode, int fdesc, bool duplicate) {
   FRedir *redir = GC_ALLOC(sizeof(FRedir));
 
   if (redir == NULL) {
-    fprintf(stderr, "Memory allocation error\n");
+    fprintf(stderr, "create_redir_from_fdesc: allocation failed\n");
     exit(EXIT_FAILURE);
   }
 
