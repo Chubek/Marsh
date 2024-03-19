@@ -1,14 +1,12 @@
+#include <fcntl.h>
 #include <limits.h>
 #include <stdbool.h>
-#include <stdin_streamt.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <unistd.h>
 
-#include "command_redirect.h"
-#include "garbage_collect.h"
-#include "mash_bounds.h"
+GCHeap *redir_heap = NULL;
 
 #define GC_INIT() redir_heap = gc_heap_create()
 #define GC_CALLOC(nmemb, size) gc_heap_alloc(redir_heap, nmemb, size)
@@ -58,7 +56,7 @@ typedef struct IORedir {
 
 Stdio *create_stdio(void) {
   Stdio *stdio = (Stdio *)GC_ALLOC(sizeof(Stdio));
-  stdio->stdin_stream = stdio->stdout_strema = stdio->stderr_stream = NULL;
+  stdio->stdin_stream = stdio->stdout_stream = stdio->stderr_stream = NULL;
   memset(&stdio->filepath[0], 0, FILENAME_MAX);
   return stdio;
 }
@@ -68,6 +66,13 @@ void stdio_set_stdout(Stdio *io, FILE *out) { io->stdout_stream = out; }
 void stdio_set_stderr(Stdio *io, FILE *err) { io->stderr_stream = err; }
 void stdio_set_filepath(const char *path) {
   memmove(&io->filepath[0], path, FILENAME_MAX);
+}
+
+void stdio_set_standard(Stdio *io) {
+  stdio_set_stdin(io, stdin);
+  stdio_set_stdout(io, stdout);
+  stdio_set_stderr(io, stderr);
+  memset(&io->filepath[0], 0, FILENAME_MAX);
 }
 
 IORedir *create_stream_redir(IORedirKind kind, const char *path) {
@@ -102,14 +107,43 @@ void io_redir_add_next(IORedir *redir, IORedir *next) {
   }
 }
 
+void redirect_streams(FILE *source, FILE *target, char action) {
+  int source_fd = fileno(source);
+  int target_fd = fileno(target);
+
+  switch (action) {
+  case 'o':
+  case 'a':
+  case 'f':
+    fflush(source);
+    dup2(target_fd, source_fd);
+    if (action == 'a') {
+      fseek(source_fd, 0, SEEK_END);
+    }
+    break;
+  case 'i':
+    dup2(target_fd, source_fd);
+    break;
+  default:
+    fprintf(stderr, "Invalid redirection action '%c'\n", action);
+    break;
+  }
+}
+
+void duplicate_streams(FILE *source, FILE *target) {
+  int source_fd = fileno(source);
+  int target_fd = fileno(target);
+
+  dup2(source_fd, target_fd);
+}
+
 void handle_io_redir_action(IORedir *redir, Stdio *stdio) {
-  switch (redir->redir_kind) {
+  switch (redir->kind) {
   case REDIR_OUT:
     redirect_streams(stdio->stdout_stream, redir->repr_stream, 'o');
     break;
   case REDIR_OUT_STDERR:
     redirect_streams(stdio->stderr_stream, redir->repr_stream, 'o');
-    break;
   case REDIR_OUT_CLOBBER:
     redirect_streams(stdio->stdout_stream, redir->repr_stream, 'f');
     break;
@@ -124,13 +158,13 @@ void handle_io_redir_action(IORedir *redir, Stdio *stdio) {
     redirect_streams(stdio->stderr_stream, redir->repr_stream, 'a');
   case REDIR_APPEND_HYBRID:
     redirect_streams(stdio->stdout_stream, redir->repr_stream, 'a');
-    redirect_streams(stdio->stderr_stream, redir->repr_streams, 'a');
+    redirect_streams(stdio->stderr_stream, redir->repr_stream, 'a');
   case REDIR_IN:
     redirect_streams(redir->repr_stream, stdio->stdin_stream, 'i');
     break;
   case REDIR_HERE_STR:
   case REDIR_HERE_DOC:
-    fputs(redir->text, stdio->stdin_stream);
+    fputs(redir->repr_text, stdio->stdin_stream);
     break;
   case REDIR_HERE_STR_ESCAPED:
   case REDIR_HERE_DOC_ESCAPED:
@@ -146,6 +180,7 @@ void handle_io_redir_action(IORedir *redir, Stdio *stdio) {
     redir->repr_stream = fopen(stdio->filepath, "w+");
     break;
   default:
-    break;
+    fprintf(stderr, "Invalid redirection mode\n");
+    exit(EXIT_FAILURE);
   }
 }
