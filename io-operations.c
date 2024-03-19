@@ -25,9 +25,9 @@ GCHeap *io_heap = NULL;
 #define GC_VIZ(stream) gc_heap_visualize(io_heap, stream)
 
 enum IOMode {
-  IO_READ = 0,
-  IO_WRITE = 1,
-  IO_APPEND = 2,
+  IO_READ = 1 << 0,
+  IO_WRITE = 1 << 1,
+  IO_APPEND = 1 << 2,
 };
 
 enum RedirMode {
@@ -40,6 +40,7 @@ enum RedirMode {
 struct FDesc {
   int fd;
   IOMode mode;
+  // TODO: add more attributes
   FDesc *next;
 };
 
@@ -98,15 +99,27 @@ FDesc *retrieve_fdesc_from_table(FDescTable *table, int fd) {
 }
 
 void remove_fdesc_from_table(FDescTable *table, int fd) {
-  FDesc *node = retrieve_fdesc_from_table(table, fd);
-  GC_FREE(node);
-  node = NULL;
+  uint16_t hash = fdtab_hash(fd);
+  FDesc *current = table->buckets[hash], *prev = NULL;
+  while (current) {
+    if (current->fd == fd) {
+      if (prev) {
+        prev->next = current->next;
+      } else {
+        table->buckets[hash] = current->next;
+      }
+      GC_FREE(current);
+      break;
+    }
+    prev = current;
+    current = current->next;
+  }
 }
 
 FRedir *create_redir_from_path(RedirMode mode, char *path, bool duplicate) {
   FRedir *redir = GC_ALLOC(sizeof(FRedir));
   redir->mode = mode;
-  memmove(&redir->path[0], path, FILENAME_MAX);
+  strncpy(&redir->path[0], path, FILENAME_MAX);
   redir->path[FILENAME_MAX] = 0;
   redir->fdesc = -1;
   redir->duplicate = duplicate;
