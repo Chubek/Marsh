@@ -40,7 +40,6 @@ enum RedirMode {
 struct FDesc {
   int fd;
   IOMode mode;
-  // TODO: add more attributes
   FDesc *next;
 };
 
@@ -60,6 +59,12 @@ static inline uint16_t fdtab_hash(int fd) { return fd % FDTAB_SIZE; }
 
 FDescTable *create_fdesc_table(void) {
   FDescTable *table = GC_ALLOC(sizeof(FDescTable));
+
+  if (table == NULL) {
+    fprintf(stderr, "Memory allocation error\n");
+    exit(EXIT_FAILURE);
+  }
+
   return table;
 }
 
@@ -70,6 +75,12 @@ FDescTable *init_fdesc_table(FDesc *table) {
 
 FDesc *insert_fdesc_into_table(FDescTable *table, int fd, IOMode mode) {
   FDesc *node = GC_ALLOC(sizeof(FDesc));
+
+  if (node == NULL) {
+    fprintf(stderr, "Memory allocation error\n");
+    exit(EXIT_FAILURE);
+  }
+
   node->fd = fd;
   node->mode = mode;
 
@@ -101,6 +112,7 @@ FDesc *retrieve_fdesc_from_table(FDescTable *table, int fd) {
 void remove_fdesc_from_table(FDescTable *table, int fd) {
   uint16_t hash = fdtab_hash(fd);
   FDesc *current = table->buckets[hash], *prev = NULL;
+
   while (current) {
     if (current->fd == fd) {
       if (prev) {
@@ -128,6 +140,12 @@ FRedir *create_redir_from_path(RedirMode mode, char *path, bool duplicate) {
 
 FRedir *create_redir_from_fdesc(RedirMode mode, int fdesc, bool duplicate) {
   FRedir *redir = GC_ALLOC(sizeof(FRedir));
+
+  if (redir == NULL) {
+    fprintf(stderr, "Memory allocation error\n");
+    exit(EXIT_FAILURE);
+  }
+
   redir->mode = mode;
   memset(&redir->path[0], 0, FILENAME_MAX);
   redir->fdesc = fdesc;
@@ -136,28 +154,62 @@ FRedir *create_redir_from_fdesc(RedirMode mode, int fdesc, bool duplicate) {
 }
 
 void init_redir_and_insert(FDescTable *table, FRedir *redir) {
+  int target_fd = redir->fdesc;
+
+  if (redir->duplicate && target_fd >= 0) {
+    target_fd = dup(target_fd);
+    if (target_fd == -1) {
+      perror("dup failed");
+      return;
+    }
+  }
+
   switch (redir->mode) {
   case REDIR_IN:
-    redir->stream = redir->fdesc == -1 ? fopen(&redir->path[0], "r")
-                                       : fdopen(redir->fdesc, "r");
-    insert_fdesc_into_table(table, redir->fdesc, IO_READ);
+    redir->stream =
+        target_fd == -1 ? fopen(redir->path, "r") : fdopen(target_fd, "r");
+    if (redir->stream == NULL) {
+      perror("Failed to open file for REDIR_IN");
+    } else {
+      insert_fdesc_into_table(table, target_fd, IO_READ);
+    }
     break;
   case REDIR_OUT:
-    redir->stream = redir->fdesc == -1 ? fopen(&redir->path[0], "w")
-                                       : fdopen(redir->fdesc, "w");
+    redir->stream =
+        target_fd == -1 ? fopen(redir->path, "w") : fdopen(target_fd, "w");
+    if (redir->stream == NULL) {
+      perror("Failed to open file for REDIR_OUT");
+    } else {
+      insert_fdesc_into_table(table, target_fd, IO_WRITE);
+    }
     break;
-    insert_fdesc_into_table(table, redir->fdesc, IO_WRITE);
   case REDIR_APPEND:
-    redir->stream = redir->fdesc == -1 ? fopen(&redir->path[0], "a")
-                                       : fdopen(&redir->fdesc, "a");
-    insert_fdesc_into_table(table, redir->fdesc, IO_APPEND);
+    redir->stream =
+        target_fd == -1 ? fopen(redir->path, "a") : fdopen(target_fd, "a");
+    if (redir->stream == NULL) {
+      perror("Failed to open file for REDIR_APPEND");
+    } else {
+      insert_fdesc_into_table(table, target_fd, IO_APPEND);
+    }
     break;
   case REDIR_RW:
-    redir->stream = redir->fdesc == -1 ? fopen(&redir->path[0], "w+")
-                                       : fdopen(&redir->fdesc, "w+");
-    insert_fdesc_into_table(table, redir->fdesc, IO_READ | IO_WRITE);
+    redir->stream =
+        target_fd == -1 ? fopen(redir->path, "w+") : fdopen(target_fd, "w+");
+    if (redir->stream == NULL) {
+      perror("Failed to open file for REDIR_RW");
+    } else {
+      insert_fdesc_into_table(table, target_fd, IO_READ | IO_WRITE);
+    }
     break;
   default:
+    fprintf(stderr, "Unknown redirection mode.\n");
+    if (target_fd != redir->fdesc) {
+      close(target_fd);
+    }
     break;
+  }
+
+  if (redir->stream == NULL && target_fd != redir->fdesc && target_fd >= 0) {
+    close(target_fd);
   }
 }
