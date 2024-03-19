@@ -12,7 +12,7 @@
 #define FDTAB_SIZE 1024
 #endif
 
-GCHeap *io_heap = NULL;
+static GCHeap *io_heap = NULL;
 
 #define GC_INIT() io_heap = gc_heap_create()
 #define GC_CALLOC(nmemb, size) gc_heap_alloc(io_heap, nmemb, size)
@@ -57,6 +57,11 @@ struct FRedir {
 
 static inline uint16_t fdtab_hash(int fd) { return fd % FDTAB_SIZE; }
 
+static void init_fdesc_table(FDescTable *table) {
+  for (size_t i = 0; i < FDTAB_SIZE; i++)
+    table->buckets[i] = NULL;
+}
+
 FDescTable *create_fdesc_table(void) {
   FDescTable *table = GC_ALLOC(sizeof(FDescTable));
 
@@ -65,12 +70,8 @@ FDescTable *create_fdesc_table(void) {
     exit(EXIT_FAILURE);
   }
 
+  init_fdesc_table(table);
   return table;
-}
-
-FDescTable *init_fdesc_table(FDesc *table) {
-  for (size_t i = 0; i < FDTAB_SIZE; i++)
-    table->buckets[i] = NULL;
 }
 
 FDesc *insert_fdesc_into_table(FDescTable *table, int fd, IOMode mode) {
@@ -98,7 +99,7 @@ FDesc *insert_fdesc_into_table(FDescTable *table, int fd, IOMode mode) {
 FDesc *retrieve_fdesc_from_table(FDescTable *table, int fd) {
   uint32_t hash = fdtab_hash(fd);
 
-  FDesc *node = table->bucket[hash];
+  FDesc *node = table->buckets[hash];
   while (node != NULL) {
     if (node->fd == fd)
       return node;
