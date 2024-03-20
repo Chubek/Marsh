@@ -29,60 +29,59 @@ static GCHeap *job_heap = NULL;
 
 
 enum ProcessState {
+  PROCSTATE_PENDING,
   PROCSTATE_RUNNING,
   PROCSTATE_STOPPED,
+  PROCSTATE_SUSPENDED,
   PROCSTATE_COMPLETED,
   PROCSTATE_TERMINATED,
 };
 
 enum JobState {
+  JOBSTATE_PENDING,
   JOBSTATE_RUNNING,
   JOBSTATE_STOPPED,
+  JOBSTATE_SUSPENDED,
+  JOBSTATE_COMPLETED,
+  JOBSTATE_TERMINATED,
 };
 
 struct SignalHandlers {
     sighandler_t *sigint;
     sighandler_t *sigchld;
     sighandler_t *sigstp;
+    sighandler_t *sigquit;
+    sighandler_t *sigterm;
 }
 
 struct Process {
   pid_t process_id;
   pid_t group_id;
   char *exec_command;
-  char *argv[ARG_MAX];
+  char *exec_arguments;
+  size_t num_arguments;
   ProcessState state;
   int exit_status;
   bool is_async;
+  FRedir *stdin_redir;
+  FRedir *stdout_redir;
+  FRedir *stderr_redir;
   Process *next;
-};
-
-struct ProcessList {
-  Process *first_process;
-  Process *next_in_line;
 };
 
 struct Job {
   int job_id;
   pid_t group_id;
-  ProcessList *processes;
+  Process *process_list;
   JobState state;
-  FRedir *stdin_redir;
-  FRedir *stdout_redir;
-  FRedir *stderr_redir;
   bool is_piped;
   bool is_foreground;
   Job *next;
 };
 
-struct JobList {
-  Job *first_job;
-  Job *next_in_line;
-};
-
 struct ShellState {
-  JobList *foreground_jobs;
-  JobList *background_jobs;
+  Job *foreground_job_list;
+  Job *background_job_list;
   int terminal_fdesc;
   struct termios tmodes;
   bool is_interactive;
@@ -98,6 +97,8 @@ SignalHandlers *create_signal_handler(void) {
     handlers->sigint = SIG_IGN;
     handlers->sigchld = SIG_IGN;
     handlers->sigstp = SIG_IGN;
+    handlers->sigquit = SIG_IGN;
+    handlers->sigterm = SIG_IGN;
     return handlers;
 }
 
@@ -119,20 +120,48 @@ void set_signal_handler_sigstp(SignalHandlers *handlers, sighandler_t handler) {
     }
 }
 
+void set_signal_handler_sigquit(SignalHandlers *handlers, sighandler_t handler) {
+    if (handlers) {
+        handlers->sigquit = handler;
+    }
+}
 
-Process *create_process(char *exec_command, char **argv, size_t num_args, bool is_async) {
+void set_signal_handler_sigterm(SignalHandlers *handlers, sighandler_t handler) {
+    if (handlers) {
+        handlers->sigterm = handler;
+    }
+}
+
+
+void sigchld_handler_async(int signum) {
+    int saved_errno = errno;
+    int status;
+    pid_t pid;
+
+    while ((pid = waitpid((pid_t)(-1), &status, WNOHANG)) > 0) {
+	    // **TODO**: add operations here
+    }
+
+    errno = saved_errno;
+}
+
+
+Process *create_process(char *exec_command, char **exec_arguments, size_t num_arguments, bool is_async) {
     Process *process = GC_ALLOC(sizeof(Process));
     if (!process) {
         perror("create_process: allocation failed");
         exit(EXIT_FAILURE);
     }
     process->exec_command = GC_MEMDUP(exec_command, strlen(exec_command) + 1);
-    for (size_t i = 0; i < num_args; i++) {
+    for (size_t i = 0; i < num_arguments; i++) {
         process->argv[i] = GC_MEMDUP(argv[i], strlen(argv[i]) + 1);
     }
-    process->argv[num_args] = NULL; // NULL-terminate the argv list
+    process->exec_arguments[num_arguments] = NULL;
     process->is_async = is_async;
-    process->state = PROCSTATE_RUNNING; // Default state
+    process->state = PROCSTATE_PENDING;
+    process->stdin_redir = NULL;
+    process->stdout_redir = NULL;
+    process->stderr_redir = NULL;
     return process;
 }
 
@@ -148,12 +177,96 @@ void set_process_exit_status(Process *process, int status) {
     }
 }
 
-void launch_process_non_async(Process *process) {
+void set_process_stdin_redir(Process *process, FRedir *redir) {
 	// implement
 }
 
-void launch_process_async(Process *process) {
+void set_process_stdout_redir(Process *process, FRedir *redir) {
 	// implement
+}
+
+void set_process_stderr_redir(Process *process, FRedir *redir) {
+	// implement
+}
+
+
+void add_next_process(Process *process, Process *next) {
+	// implement
+}
+
+
+
+
+
+void wait_on_process_non_async(Process *process) {
+    if (process == NULL || process->is_async) {
+        fprintf(stderr, "wait_on_process_non_async: Invalid process or process is asynchronous.\n");
+        return;
+    }
+
+    int status;
+    while (waitpid(process->process_id, &status, 0) == -1) {
+        if (errno != EINTR) { // Interrupted by a signal that was caught.
+            perror("waitpid failed");
+            break;
+        }
+    }
+
+    if (WIFEXITED(status)) {
+        process->exit_status = WEXITSTATUS(status);
+    } else if (WIFSIGNALED(status)) {
+        process->exit_status = WTERMSIG(status);
+    }
+
+    set_process_state(process, PROCSTATE_COMPLETED);
+}
+
+
+void launch_process_non_async(Process *process) {
+    if (process == NULL || process->is_async) {
+        fprintf(stderr, "launch_process_non_async: Invalid process or process is asynchronous.\n");
+        return;
+    }
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork failed");
+        exit(EXIT_FAILURE);
+    } else if (pid == 0) {
+ 	// **TODO**: set up redirections
+
+        if (execvp(process->exec_command, process->exec_arguments) == -1) {
+            perror("execvp failed");
+            exit(EXIT_FAILURE);
+        }
+    } else {
+        process->process_id = pid;
+        set_process_state(process, PROCSTATE_RUNNING);
+        wait_on_process_non_async(process);
+    }
+}
+
+void launch_process_async(Process *process) {
+    if (process == NULL || !process->is_async) {
+        fprintf(stderr, "launch_process_async: Invalid process or process is not asynchronous.\n");
+        return;
+    }
+
+    pid_t pid = fork();
+    if (pid == -1) {
+        perror("fork failed");
+        exit(EXIT_FAILURE);
+    } else if (pid == 0) {
+  	// **TODO**: set up redirections
+
+        if (execvp(process->exec_command, process->exec_arguments) == -1) {
+            perror("execvp failed");
+            exit(EXIT_FAILURE);
+        }
+    } else { // Parent process
+        process->process_id = pid;
+        set_process_state(process, PROCSTATE_RUNNING);
+    }
 }
 
 
@@ -161,19 +274,7 @@ void hook_process_signals_handlers(Process *process, SignalHandlers *handlers) {
 	// implement
 }
 
-void wait_on_process(Process *process) {
-	// implement
-}
 
-
-ProcessList *create_process_list(void) {
-	// implement
-}
-
-
-void add_process_to_list(ProcessList *list, Process *process) {
-	// implement
-}
 
 
 Job *create_job(int job_id) {
@@ -185,18 +286,6 @@ void set_job_group_id(Job *job, pid_t group_id) {
 }
 
 void set_job_state(Job *job, JobState state) {
-	// implement
-}
-
-void set_job_stdin_redir(Job *job, FRedir *redir) {
-	// implement
-}
-
-void set_job_stdout_redir(Job *job, FRedir *redir) {
-	// implement
-}
-
-void set_job_stderr_redir(Job *job, FRedir *redir) {
 	// implement
 }
 
@@ -212,28 +301,20 @@ void add_job_process(Job *job, Process *process) {
 	// implement
 }
 
-JobList *create_job_list(void) {
-    JobList *list = GC_ALLOC(sizeof(JobList));
-    if (!list) {
-        perror("create_job_list: allocation failed");
-        exit(EXIT_FAILURE);
-    }
-    list->first_job = NULL;
-    return list;
+void add_next_job(Job *job, Job *next) {
+	// implement
 }
 
-void add_job_to_list(JobList *list, Job *job) {
-    if (!list || !job) return;
-    if (list->first_job == NULL) {
-        list->first_job = job;
-    } else {
-        Job *current = list->first_job;
-        while (current->next) {
-            current = current->next;
-        }
-        current->next = job;
-    }
+
+void handle_job_redirection(Job *job) {
+	// implement: this function should handle redirections of a job, based of FDRedir's
 }
+
+
+void handle_job_piping(Job *job) {
+	// implement: this function should handle piping to the next job, if is_piped? = true
+}
+
 
 
 ShellState *create_shell_state(bool is_interactive) {
