@@ -63,9 +63,9 @@ struct Process {
   ProcessState state;
   int exit_status;
   bool is_async;
-  FRedir *stdin_redir;
-  FRedir *stdout_redir;
-  FRedir *stderr_redir;
+  int stdin_fileno;
+  int stdout_fileno;
+  int stderr_fileno;
   Process *next;
 };
 
@@ -159,9 +159,9 @@ Process *create_process(char *exec_command, char **exec_arguments, size_t num_ar
     process->exec_arguments[num_arguments] = NULL;
     process->is_async = is_async;
     process->state = PROCSTATE_PENDING;
-    process->stdin_redir = NULL;
-    process->stdout_redir = NULL;
-    process->stderr_redir = NULL;
+    process->stdin_fileno = STDIN_FILENO;
+    process->stdout_fileno = STDOUT_FILENO;
+    process->stderr_fileno = STDERR_FILENO;
     return process;
 }
 
@@ -177,15 +177,15 @@ void set_process_exit_status(Process *process, int status) {
     }
 }
 
-void set_process_stdin_redir(Process *process, FRedir *redir) {
+void set_process_stdin_fileno(Process *process, char *shell_word) {
 	// implement
 }
 
-void set_process_stdout_redir(Process *process, FRedir *redir) {
+void set_process_stdout_fileno(Process *process, char *shell_word) {
 	// implement
 }
 
-void set_process_stderr_redir(Process *process, FRedir *redir) {
+void set_process_stderr_fileno(Process *process, char *shell_word) {
 	// implement
 }
 
@@ -195,6 +195,31 @@ void add_next_process(Process *process, Process *next) {
 }
 
 
+void apply_redirections(Process *process) {
+    if (process->stdin_fileno != STDIN_FILENO) {
+        if (dup2(process->stdin_fileno, STDIN_FILENO) == -1) {
+            perror("Failed to redirect stdin");
+            exit(EXIT_FAILURE);
+        }
+        close(process->stdin_fileno);
+    }
+
+    if (process->stdout_fileno != STDOUT_FILENO) {
+        if (dup2(process->stdout_fileno, STDOUT_FILENO) == -1) {
+            perror("Failed to redirect stdout");
+            exit(EXIT_FAILURE);
+        }
+        close(process->stdout_fileno);
+    }
+
+    if (process->stderr_fileno != STDERR_FILENO) {
+        if (dup2(process->stderr_fileno, STDERR_FILENO) == -1) {
+            perror("Failed to redirect stderr");
+            exit(EXIT_FAILURE);
+        }
+        close(process->stderr_fileno);
+    }
+}
 
 
 
@@ -233,7 +258,7 @@ void launch_process_non_async(Process *process) {
         perror("fork failed");
         exit(EXIT_FAILURE);
     } else if (pid == 0) {
- 	// **TODO**: set up redirections
+        apply_redirections(process);
 
         if (execvp(process->exec_command, process->exec_arguments) == -1) {
             perror("execvp failed");
@@ -257,7 +282,7 @@ void launch_process_async(Process *process) {
         perror("fork failed");
         exit(EXIT_FAILURE);
     } else if (pid == 0) {
-  	// **TODO**: set up redirections
+        apply_redirections(process);
 
         if (execvp(process->exec_command, process->exec_arguments) == -1) {
             perror("execvp failed");
