@@ -199,11 +199,17 @@ void set_process_exit_status(Process *process, int status) {
   }
 }
 
-void set_process_stdin_fileno(Process *process, char *shell_word) {}
+void set_process_stdin_fileno(Process *process, int fdesc) {
+  process->stdin_fileno = fdesc;
+}
 
-void set_process_stdout_fileno(Process *process, char *shell_word) {}
+void set_process_stdout_fileno(Process *process, int fdesc) {
+  process->stdout_fileno = fdesc;
+}
 
-void set_process_stderr_fileno(Process *process, char *shell_word) {}
+void set_process_stderr_fileno(Process *process, int fdesc) {
+  process->stderr_fileno = fdesc;
+}
 
 void add_next_process(Process *head, Process *next) {
   if (!head || !next)
