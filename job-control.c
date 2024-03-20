@@ -165,12 +165,9 @@ void sigchld_handler_async(int signum) {
     } else {
       fprintf(stderr, "Received SIGCHLD for unknown pid %d\n", pid);
     }
+    errno = saved_errno;
+    remove_from_waiting_process_list(pid);
   }
-}
-
-errno = saved_errno;
-
-remove_from_waiting_process_list(pid);
 }
 
 Process *create_process(char *exec_command, char **exec_arguments,
@@ -232,239 +229,240 @@ Process *find_process_by_pid(Process *process_chain, pid_t process_id) {
     waiting_process->next = waiting_process_list;
     waiting_process_list = waiting_process;
   }
+}
 
-  void remove_from_waiting_process_list(pid_t process_id) {
-    Process **indirect = &waiting_process_list;
+void remove_from_waiting_process_list(pid_t process_id) {
+  Process **indirect = &waiting_process_list;
 
-    while (*indirect) {
-      Process *current = *indirect;
-      if (current->process_id == process_id) {
-        free_process(current);
-        *indirect = current->next;
-        return;
-      }
-      indirect = &current->next;
-    }
-  }
-
-  void free_process(Process * process) {
-    if (process == NULL)
-      return;
-
-    GC_FREE(process->exec_command);
-    for (size_t i = 0; i < process->num_arguments; i++) {
-      GC_FREE(process->exec_arguments[i]);
-    }
-    GC_FREE(process->exec_arguments);
-    GC_FREE(process);
-  }
-
-  void free_process_list(Process * head) {
-    Process *current = head;
-    while (current) {
-      Process *next = current->next;
+  while (*indirect) {
+    Process *current = *indirect;
+    if (current->process_id == process_id) {
       free_process(current);
-      current = next;
-    }
-  }
-
-  void free_waiting_process_list(void) {
-    free_process_list(waiting_process_list);
-    waiting_process_list = NULL;
-  }
-
-  void apply_redirections(Process * process) {
-    if (process->stdin_fileno != STDIN_FILENO) {
-      if (dup2(process->stdin_fileno, STDIN_FILENO) == -1) {
-        perror("Failed to redirect stdin");
-        exit(EXIT_FAILURE);
-      }
-      close(process->stdin_fileno);
-    }
-
-    if (process->stdout_fileno != STDOUT_FILENO) {
-      if (dup2(process->stdout_fileno, STDOUT_FILENO) == -1) {
-        perror("Failed to redirect stdout");
-        exit(EXIT_FAILURE);
-      }
-      close(process->stdout_fileno);
-    }
-
-    if (process->stderr_fileno != STDERR_FILENO) {
-      if (dup2(process->stderr_fileno, STDERR_FILENO) == -1) {
-        perror("Failed to redirect stderr");
-        exit(EXIT_FAILURE);
-      }
-      close(process->stderr_fileno);
-    }
-  }
-
-  void wait_on_process_non_async(Process * process) {
-    if (process == NULL || process->is_async) {
-      fprintf(stderr, "wait_on_process_non_async: Invalid process or process "
-                      "is asynchronous.\n");
+      *indirect = current->next;
       return;
     }
-
-    int status;
-    while (waitpid(process->process_id, &status, 0) == -1) {
-      if (errno != EINTR) {
-        perror("waitpid failed");
-        break;
-      }
-    }
-
-    if (WIFEXITED(status)) {
-      process->exit_status = WEXITSTATUS(status);
-    } else if (WIFSIGNALED(status)) {
-      process->exit_status = WTERMSIG(status);
-    }
-
-    set_process_state(process, PROCSTATE_COMPLETED);
+    indirect = &current->next;
   }
+}
 
-  void launch_process_non_async(Process * process) {
-    if (process == NULL || process->is_async) {
-      fprintf(stderr, "launch_process_non_async: Invalid process or process is "
-                      "asynchronous.\n");
-      return;
-    }
+void free_process(Process *process) {
+  if (process == NULL)
+    return;
 
-    pid_t pid = fork();
-    if (pid == -1) {
-      perror("fork failed");
-      exit(EXIT_FAILURE);
-    } else if (pid == 0) {
-      apply_redirections(process);
-
-      if (execvp(process->exec_command, process->exec_arguments) == -1) {
-        perror("execvp failed");
-        exit(EXIT_FAILURE);
-      }
-    } else {
-      process->process_id = pid;
-      set_process_state(process, PROCSTATE_RUNNING);
-      add_to_waiting_process_list(process);
-      wait_on_process_non_async(process);
-    }
-
-    remove_from_waiting_process_list(pid);
+  GC_FREE(process->exec_command);
+  for (size_t i = 0; i < process->num_arguments; i++) {
+    GC_FREE(process->exec_arguments[i]);
   }
+  GC_FREE(process->exec_arguments);
+  GC_FREE(process);
+}
 
-  void launch_process_async(Process * process) {
-    if (process == NULL || !process->is_async) {
-      fprintf(stderr, "launch_process_async: Invalid process or process is not "
-                      "asynchronous.\n");
-      return;
-    }
-
-    pid_t pid = fork();
-    if (pid == -1) {
-      perror("fork failed");
-      exit(EXIT_FAILURE);
-    } else if (pid == 0) {
-      apply_redirections(process);
-
-      if (execvp(process->exec_command, process->exec_arguments) == -1) {
-        perror("execvp failed");
-        exit(EXIT_FAILURE);
-      }
-    } else {
-      process->process_id = pid;
-      add_to_waiting_process_list(process);
-      set_process_state(process, PROCSTATE_RUNNING);
-    }
+void free_process_list(Process *head) {
+  Process *current = head;
+  while (current) {
+    Process *next = current->next;
+    free_process(current);
+    current = next;
   }
+}
 
-  void hook_process_signals_handlers(Process * process,
-                                     SignalHandlers * handlers) {}
+void free_waiting_process_list(void) {
+  free_process_list(waiting_process_list);
+  waiting_process_list = NULL;
+}
 
-  Job *create_job(int job_id) {
-    Job *job = GC_ALLOC(sizeof(Job));
-
-    if (job == NULL) {
-      perror("Failed to allocate memory for a new job");
+void apply_redirections(Process *process) {
+  if (process->stdin_fileno != STDIN_FILENO) {
+    if (dup2(process->stdin_fileno, STDIN_FILENO) == -1) {
+      perror("Failed to redirect stdin");
       exit(EXIT_FAILURE);
     }
-
-    job->job_id = job_id;
-    job->group_id = -1;
-    job->process_list = NULL;
-    job->state = JOBSTATE_PENDING;
-    job->is_piped = false;
-    job->is_foreground = true;
-    job->next = NULL;
-
-    return job;
+    close(process->stdin_fileno);
   }
 
-  void set_job_group_id(Job * job, pid_t group_id) {
-    if (!job)
-      return;
-    job->groupd_id = groupd_id;
-  }
-
-  void set_job_state(Job * job, JobState state) {
-    if (!job)
-      return;
-    job->state = state;
-  }
-
-  void set_job_piped(Job * job, bool is_piped) {
-    if (!job)
-      return;
-    job->is_piped = is_piped;
-  }
-
-  void set_job_exit_state_negated(Job * job, bool exit_stat_negated) {
-    if (!job)
-      return;
-    job->exit_stat_negated = exit_stat_negated;
-  }
-
-  void set_job_foreground(Job * job, bool is_foreground) {
-    if (!job)
-      return;
-    job->is_foreground = is_foreground;
-  }
-
-  void set_job_exit_stat_coalesce(Job * job, int exit_stat_coalesce) {
-    if (!job)
-      return;
-    job->exit_stat_coalesce = exit_stat_coalesce;
-  }
-
-  void add_job_process(Job * job, Process * process) {}
-
-  void add_next_job(Job * job, Job * next) {}
-
-  void handle_job_redirection(Job * job) {}
-
-  void handle_job_piping(Job * job) {}
-
-  ShellState *create_shell_state(bool is_interactive) {
-    ShellState *state = GC_ALLOC(sizeof(ShellState));
-    if (!state) {
-      perror("create_shell_state: allocation failed");
+  if (process->stdout_fileno != STDOUT_FILENO) {
+    if (dup2(process->stdout_fileno, STDOUT_FILENO) == -1) {
+      perror("Failed to redirect stdout");
       exit(EXIT_FAILURE);
     }
-
-    state->is_interactive = is_interactive;
-    state->foreground_jobs = create_job_list();
-    state->background_jobs = create_job_list();
-    state->fdesc_table = create_fdesc_table();
-
-    return state;
+    close(process->stdout_fileno);
   }
 
-  void set_shell_state_terminal_fdesc(ShellState * state, int terminal_fdesc) {}
+  if (process->stderr_fileno != STDERR_FILENO) {
+    if (dup2(process->stderr_fileno, STDERR_FILENO) == -1) {
+      perror("Failed to redirect stderr");
+      exit(EXIT_FAILURE);
+    }
+    close(process->stderr_fileno);
+  }
+}
 
-  void save_shell_state_termios(ShellShate * state) {}
+void wait_on_process_non_async(Process *process) {
+  if (process == NULL || process->is_async) {
+    fprintf(stderr, "wait_on_process_non_async: Invalid process or process "
+                    "is asynchronous.\n");
+    return;
+  }
 
-  void init_shell_state_fdesc_table(ShellState * state) {}
+  int status;
+  while (waitpid(process->process_id, &status, 0) == -1) {
+    if (errno != EINTR) {
+      perror("waitpid failed");
+      break;
+    }
+  }
 
-  void shell_state_insert_fdesc(ShellState * state, FDesc * fdesc) {}
+  if (WIFEXITED(status)) {
+    process->exit_status = WEXITSTATUS(status);
+  } else if (WIFSIGNALED(status)) {
+    process->exit_status = WTERMSIG(status);
+  }
 
-  void shell_state_insert_foreground_job(ShellState * state, Job * job) {}
+  set_process_state(process, PROCSTATE_COMPLETED);
+}
 
-  void shell_state_insert_background_job(ShellState * state, Job * job) {}
+void launch_process_non_async(Process *process) {
+  if (process == NULL || process->is_async) {
+    fprintf(stderr, "launch_process_non_async: Invalid process or process is "
+                    "asynchronous.\n");
+    return;
+  }
+
+  pid_t pid = fork();
+  if (pid == -1) {
+    perror("fork failed");
+    exit(EXIT_FAILURE);
+  } else if (pid == 0) {
+    apply_redirections(process);
+
+    if (execvp(process->exec_command, process->exec_arguments) == -1) {
+      perror("execvp failed");
+      exit(EXIT_FAILURE);
+    }
+  } else {
+    process->process_id = pid;
+    set_process_state(process, PROCSTATE_RUNNING);
+    add_to_waiting_process_list(process);
+    wait_on_process_non_async(process);
+  }
+
+  remove_from_waiting_process_list(pid);
+}
+
+void launch_process_async(Process *process) {
+  if (process == NULL || !process->is_async) {
+    fprintf(stderr, "launch_process_async: Invalid process or process is not "
+                    "asynchronous.\n");
+    return;
+  }
+
+  pid_t pid = fork();
+  if (pid == -1) {
+    perror("fork failed");
+    exit(EXIT_FAILURE);
+  } else if (pid == 0) {
+    apply_redirections(process);
+
+    if (execvp(process->exec_command, process->exec_arguments) == -1) {
+      perror("execvp failed");
+      exit(EXIT_FAILURE);
+    }
+  } else {
+    process->process_id = pid;
+    add_to_waiting_process_list(process);
+    set_process_state(process, PROCSTATE_RUNNING);
+  }
+}
+
+void hook_process_signals_handlers(Process *process, SignalHandlers *handlers) {
+}
+
+Job *create_job(int job_id) {
+  Job *job = GC_ALLOC(sizeof(Job));
+
+  if (job == NULL) {
+    perror("Failed to allocate memory for a new job");
+    exit(EXIT_FAILURE);
+  }
+
+  job->job_id = job_id;
+  job->group_id = -1;
+  job->process_list = NULL;
+  job->state = JOBSTATE_PENDING;
+  job->is_piped = false;
+  job->is_foreground = true;
+  job->next = NULL;
+
+  return job;
+}
+
+void set_job_group_id(Job *job, pid_t group_id) {
+  if (!job)
+    return;
+  job->groupd_id = groupd_id;
+}
+
+void set_job_state(Job *job, JobState state) {
+  if (!job)
+    return;
+  job->state = state;
+}
+
+void set_job_piped(Job *job, bool is_piped) {
+  if (!job)
+    return;
+  job->is_piped = is_piped;
+}
+
+void set_job_exit_state_negated(Job *job, bool exit_stat_negated) {
+  if (!job)
+    return;
+  job->exit_stat_negated = exit_stat_negated;
+}
+
+void set_job_foreground(Job *job, bool is_foreground) {
+  if (!job)
+    return;
+  job->is_foreground = is_foreground;
+}
+
+void set_job_exit_stat_coalesce(Job *job, int exit_stat_coalesce) {
+  if (!job)
+    return;
+  job->exit_stat_coalesce = exit_stat_coalesce;
+}
+
+void add_job_process(Job *job, Process *process) {}
+
+void add_next_job(Job *job, Job *next) {}
+
+void handle_job_redirection(Job *job) {}
+
+void handle_job_piping(Job *job) {}
+
+ShellState *create_shell_state(bool is_interactive) {
+  ShellState *state = GC_ALLOC(sizeof(ShellState));
+  if (!state) {
+    perror("create_shell_state: allocation failed");
+    exit(EXIT_FAILURE);
+  }
+
+  state->is_interactive = is_interactive;
+  state->foreground_jobs = create_job_list();
+  state->background_jobs = create_job_list();
+  state->fdesc_table = create_fdesc_table();
+
+  return state;
+}
+
+void set_shell_state_terminal_fdesc(ShellState *state, int terminal_fdesc) {}
+
+void save_shell_state_termios(ShellShate *state) {}
+
+void init_shell_state_fdesc_table(ShellState *state) {}
+
+void shell_state_insert_fdesc(ShellState *state, FDesc *fdesc) {}
+
+void shell_state_insert_foreground_job(ShellState *state, Job *job) {}
+
+void shell_state_insert_background_job(ShellState *state, Job *job) {}
