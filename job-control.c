@@ -76,18 +76,15 @@ struct Job {
   JobState state;
   bool is_piped;
   bool exit_stat_negated;
-  bool is_foreground;
   int exit_stat_coalesce;
   Job *next;
 };
 
 struct ShellState {
-  Job *foreground_job_list;
-  Job *background_job_list;
-  int terminal_fdesc;
+  Job *job_list;
+  int term_fdesc;
   struct termios tmodes;
   bool is_interactive;
-  FDescTable *fdesc_table;
 };
 
 SignalHandlers *create_signal_handler(void) {
@@ -208,7 +205,17 @@ void set_process_stdout_fileno(Process *process, char *shell_word) {}
 
 void set_process_stderr_fileno(Process *process, char *shell_word) {}
 
-void add_next_process(Process *process, Process *next) {}
+void add_next_process(Process *head, Process *next) {
+  if (!head || !next)
+    return;
+
+  Process *current = head;
+  while (current->next != NULL) {
+    current = current->next;
+  }
+  current->next = next;
+  next->next = NULL;
+}
 
 Process *find_process_by_pid(Process *process_chain, pid_t process_id) {
   Process *current = process_chain;
@@ -321,6 +328,10 @@ void wait_on_process_non_async(Process *process) {
   set_process_state(process, PROCSTATE_COMPLETED);
 }
 
+void hook_process_signals_handlers(pid_t process_id, SignalHandlers *handlers) {
+  // hooks signal handlers to newlyt created processes id
+}
+
 void launch_process_non_async(Process *process) {
   if (process == NULL || process->is_async) {
     fprintf(stderr, "launch_process_non_async: Invalid process or process is "
@@ -333,6 +344,7 @@ void launch_process_non_async(Process *process) {
     perror("fork failed");
     exit(EXIT_FAILURE);
   } else if (pid == 0) {
+    hook_signal_handlers(pid, &global_signal_handlers);
     apply_redirections(process);
 
     if (execvp(process->exec_command, process->exec_arguments) == -1) {
@@ -361,6 +373,7 @@ void launch_process_async(Process *process) {
     perror("fork failed");
     exit(EXIT_FAILURE);
   } else if (pid == 0) {
+    hook_signal_handlers(pid, &global_signal_handlers);
     apply_redirections(process);
 
     if (execvp(process->exec_command, process->exec_arguments) == -1) {
@@ -372,9 +385,6 @@ void launch_process_async(Process *process) {
     add_to_waiting_process_list(process);
     set_process_state(process, PROCSTATE_RUNNING);
   }
-}
-
-void hook_process_signals_handlers(Process *process, SignalHandlers *handlers) {
 }
 
 Job *create_job(int job_id) {
@@ -420,49 +430,55 @@ void set_job_exit_state_negated(Job *job, bool exit_stat_negated) {
   job->exit_stat_negated = exit_stat_negated;
 }
 
-void set_job_foreground(Job *job, bool is_foreground) {
-  if (!job)
-    return;
-  job->is_foreground = is_foreground;
-}
-
 void set_job_exit_stat_coalesce(Job *job, int exit_stat_coalesce) {
   if (!job)
     return;
   job->exit_stat_coalesce = exit_stat_coalesce;
 }
 
-void add_job_process(Job *job, Process *process) {}
+void add_job_next_process(Job *job, Process *process) {
+  if (!job || !process)
+    return;
 
-void add_next_job(Job *job, Job *next) {}
-
-void handle_job_redirection(Job *job) {}
-
-void handle_job_piping(Job *job) {}
-
-ShellState *create_shell_state(bool is_interactive) {
-  ShellState *state = GC_ALLOC(sizeof(ShellState));
-  if (!state) {
-    perror("create_shell_state: allocation failed");
-    exit(EXIT_FAILURE);
-  }
-
-  state->is_interactive = is_interactive;
-  state->foreground_jobs = create_job_list();
-  state->background_jobs = create_job_list();
-  state->fdesc_table = create_fdesc_table();
-
-  return state;
+  add_process(job->process_list, process);
+  process->group_id = job->group_id;
 }
 
-void set_shell_state_terminal_fdesc(ShellState *state, int terminal_fdesc) {}
+void add_job(Job *head, Job *next) {
+  if (!head || !next)
+    return;
 
-void save_shell_state_termios(ShellShate *state) {}
+  Job *current = head;
+  while (current->next != NULL) {
+    current = current->next;
+  }
+  current->next = next;
+  next->next = NULL;
+}
 
-void init_shell_state_fdesc_table(ShellState *state) {}
+void free_job(Job *job) {
+  // TODO: implement
+}
 
-void shell_state_insert_fdesc(ShellState *state, FDesc *fdesc) {}
+void free_job_list(Job *job_list) {
+  // TODO: implement
+}
 
-void shell_state_insert_foreground_job(ShellState *state, Job *job) {}
+void initialize_shell_state(ShellState *shell_stete, bool is_interactive) {
+  // given an static 'ShellState', this function should initialize it
+  // and all its members, save the termio state, and get the temrinal fdesc.
+  // And it should also initialize the job list
+}
 
-void shell_state_insert_background_job(ShellState *state, Job *job) {}
+void shell_state_append_job_list(ShellState *state, Job *next_job) {
+  // adds next job to 'struct ShellState.job_list'
+}
+
+void shell_state_free_job_list(ShellState *shell_state) {
+  // frees up the job list using 'job_list_free'
+}
+
+void shell_state_connect_jobs(ShellState *shell_state) {
+  // connects the current job with the next job, and add the exist status to the
+  // coalesce
+}
