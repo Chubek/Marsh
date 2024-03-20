@@ -21,4 +21,5 @@ glob = KleeneStar(glob* p)
      | Sequence(glob* s)
      | Char(int c)
      | Num(int c)
+     | Class(class c)
      ;
