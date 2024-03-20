@@ -46,7 +46,11 @@ static Job *jobs = NULL;
 static pid_t shell_pgid = -1;
 
 void initialize_job_control(void);
-void handle_sigchld(int sig);
+void sigchld_handler(int sig);
+void sigint_handler(int sig);
+void sigstp_handler(int sig);
+void sigcont_handler(int sig);
+void setup_signal_handlers(void);
 void launch_job(Job *job, int foreground);
 void put_job_in_foreground(Job *job, int cont);
 void put_job_in_background(Job *job, int cont);
@@ -70,15 +74,39 @@ void initialize_job_control(void) {
 
   tcsetpgrp(STDIN_FILENO, pid);
   tcgetattr(STDIN_FILENO, &shell_tmodes);
-  signal(SIGCHLD, handle_sigchld);
+  signal(SIGCHLD, sigchld_handler);
 }
 
-void handle_sigchld(int sig) {
+void sigchld_handler(int sig) {
   pid_t pid;
   int status;
 
   while ((pid = waitpid(-1, &status, WNOHANG | WUNTRACED)) > 0) {
     mark_process_status(pid, status);
+  }
+}
+
+void setup_signal_handlers(void) {
+  struct sigaction sa;
+
+  sa.sa_handler = sigint_handler;
+  sigemptyset(&sa.sa_mask);
+  sa.sa_flags = SA_RESTART;
+  if (sigaction(SIGINT, &sa, NULL) == -1) {
+    perror("sigaction");
+    exit(EXIT_FAILURE);
+  }
+
+  sa.sa_handler = sigstp_handler;
+  if (sigaction(SIGTSTP, &sa, NULL) == -1) {
+    perror("sigaction");
+    exit(EXIT_FAILURE);
+  }
+
+  sa.sa_handler = sigchld_handler;
+  if (sigaction(SIGCHLD, &sa, NULL) == -1) {
+    perror("sigaction");
+    exit(EXIT_FAILURE);
   }
 }
 
