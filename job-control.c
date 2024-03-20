@@ -52,6 +52,7 @@ struct SignalHandlers {
   sighandler_t *sigstp;
   sighandler_t *sigquit;
   sighandler_t *sigterm;
+  sighnadler_t *sigchld_async;
 }
 
 struct Process {
@@ -72,6 +73,7 @@ struct Process {
 struct Job {
   int job_id;
   pid_t group_id;
+  pid_t group_leader_sid;
   Process *process_list;
   JobState state;
   bool is_piped;
@@ -133,6 +135,15 @@ void set_signal_handler_sigterm(SignalHandlers *handlers,
     handlers->sigterm = handler;
   }
 }
+
+void set_signal_handler_sigchld_async(SignalHandlers *handlers,
+                                sighandler_t handler) {
+  if (handlers) {
+    handlers->sigchld_async = handler;
+  }
+}
+
+
 
 void sigchld_handler_async(int signum) {
   int saved_errno = errno;
@@ -335,7 +346,7 @@ void wait_on_process_non_async(Process *process) {
 }
 
 void hook_process_signals_handlers(pid_t process_id, SignalHandlers *handlers) {
-  // hooks signal handlers to newlyt created processes id
+  
 }
 
 void launch_process_non_async(Process *process) {
@@ -413,42 +424,52 @@ Job *create_job(int job_id) {
 }
 
 void set_job_group_id(Job *job, pid_t group_id) {
-  if (!job)
-    return;
-  job->groupd_id = groupd_id;
+    if (job) {
+        job->group_id = group_id;
+    }
 }
 
 void set_job_state(Job *job, JobState state) {
-  if (!job)
-    return;
-  job->state = state;
+    if (job) {
+        job->state = state;
+    }
 }
 
+
 void set_job_piped(Job *job, bool is_piped) {
-  if (!job)
-    return;
-  job->is_piped = is_piped;
+    if (job) {
+        job->is_piped = is_piped;
+    }
 }
 
 void set_job_exit_state_negated(Job *job, bool exit_stat_negated) {
-  if (!job)
-    return;
-  job->exit_stat_negated = exit_stat_negated;
+    if (job) {
+        job->exit_stat_negated = exit_stat_negated;
+    }
 }
 
 void set_job_exit_stat_coalesce(Job *job, int exit_stat_coalesce) {
-  if (!job)
-    return;
-  job->exit_stat_coalesce = exit_stat_coalesce;
+    if (job) {
+        job->exit_stat_coalesce = exit_stat_coalesce;
+    }
 }
+
 
 void add_job_next_process(Job *job, Process *process) {
-  if (!job || !process)
-    return;
+    if (!job || !process) return;
 
-  add_process(job->process_list, process);
-  process->group_id = job->group_id;
+    if (!job->process_list) {
+        job->process_list = process;
+    } else {
+        Process *last_process = job->process_list;
+        while (last_process->next) {
+            last_process = last_process->next;
+        }
+        last_process->next = process;
+    }
+    process->next = NULL;
 }
+
 
 void add_job(Job *head, Job *next) {
   if (!head || !next)
@@ -463,28 +484,75 @@ void add_job(Job *head, Job *next) {
 }
 
 void free_job(Job *job) {
-  // TODO: implement
+    if (job) {
+        free_process_list(job->process_list); 
+        GC_FREE(job);
+    }
 }
 
-void free_job_list(Job *job_list) {
-  // TODO: implement
+void free_job_list(Job *head) {
+    while (head) {
+        Job *temp = head;
+        head = head->next;
+        free_job(temp);
+    }
 }
 
-void initialize_shell_state(ShellState *shell_stete, bool is_interactive) {
-  // given an static 'ShellState', this function should initialize it
-  // and all its members, save the termio state, and get the temrinal fdesc.
-  // And it should also initialize the job list
+
+void initialize_shell_state(ShellState *shell_state, bool is_interactive) {
+    if (!shell_state) return;
+    
+    GC_INIT();    
+    shell_state->is_interactive = is_interactive;    
+    shell_state->job_list = NULL;   
+        
+    shell_state->term_fdesc = is_interactive 
+	&& isatty(STDIN_FILENO) 
+	    ? STDIN_FILENO 
+	    : -1
+	    ;
+    
+    if (is_interactive && isatty(shell_state->term_fdesc)) {
+        if (tcgetattr(shell_state->term_fdesc, &shell_state->tmodes) != 0) {
+            perror("Failed to get terminal attributes");
+            exit(EXIT_FAILURE);
+        }
+    }
+
+        
+    SignalHandlers *handlers = create_signal_handler();
+    set_signal_handler_sigchld_async(handlers, sigchld_handler_async); 
+        
+    
 }
+
+
 
 void shell_state_append_job_list(ShellState *state, Job *next_job) {
-  // adds next job to 'struct ShellState.job_list'
+    if (!state || !next_job) return;
+
+    Job *currentJob = state->job_list;
+    if (!currentJob) {
+        
+        state->job_list = next_job;
+    } else {
+        
+        while (currentJob->next) {
+            currentJob = currentJob->next;
+        }
+        currentJob->next = next_job;
+    }
+    next_job->next = NULL; 
 }
 
 void shell_state_free_job_list(ShellState *shell_state) {
-  // frees up the job list using 'job_list_free'
+    if (shell_state) {
+        free_job_list(shell_state->job_list);
+        shell_state->job_list = NULL; 
+    }
 }
 
 void shell_state_connect_jobs(ShellState *shell_state) {
-  // connects the current job with the next job, and add the exist status to the
-  // coalesce
+	 
+  
 }
