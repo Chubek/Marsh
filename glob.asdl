@@ -1,0 +1,27 @@
+class = Alnum
+      | Alpha
+      | Digit
+      | Xdigit
+      | Space
+      | Blank
+      | Upper
+      | Lower
+      | Graph
+      | Ctrl
+      | Print
+      ;
+
+
+glob = KleeneStar(glob* patt)
+     | KleenePlus(glob* patt)
+     | Optional(glob* patt)
+     | ExactMatch(glob* patt)
+     | NegateMatch(glob* patt)
+     | Range(glob left, glob right)
+     | Sequence(glob* seq)
+     | Character(int chr)
+     | EscapedChar(int echr)
+     | Num(int num)
+     | Class(class cls)
+     ;
+
