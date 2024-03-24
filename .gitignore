@@ -50,3 +50,6 @@ parse.h
 
 # Info files
 *.info
+
+# ASDL generated files
+*.syngen.h
