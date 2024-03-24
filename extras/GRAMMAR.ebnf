@@ -130,7 +130,7 @@ file-descriptor         ::= stdin-fdesc
                           | stderr-fdesc
                           | general-fdesc
 
-general-fdesc           ::= [ '3'..'9' ] { digit }  
+general-fdesc           ::= [ '3' | ... | '9' ] { digit }  
 
 stderr-fdesc            ::= '2'
 
