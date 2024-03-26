@@ -49,8 +49,8 @@ This script scans a C file for specific directives and generates static allocati
 
 The directives are in the style of C preprocessor directives. These directives, and their signature, are as follows:
 
-	#alloc <heap name> , <allocate function name> , <reallocate function name> , <dump function name>
-	#hashfunc <hash function name>
+	//=>alloc <heap name> , <allocate function name> , <reallocate function name> , <dump function name>
+	//hashfunc=> <hash function name>
 
 The signature of the generated functions is:
 
@@ -58,11 +58,11 @@ The signature of the generated functions is:
 	void* <reallocate function>(void* ptr, size_t resize);
 	void  <dump function>(void);
 
-All the directive parameters are mandatory. You can create several heaps, but only one '#hashfunc' directive is necessary.
+All the directive parameters are mandatory. You can create several heaps, but only one '//hashfunc=>' directive is necessary.
 
-Basically, the #alloc directive creates an allocation heap, and an allocation, reallocation, and dump function for it. You can use this heap to allocate and reallocate data, and then dump it at the end.
+Basically, the //=>alloc directive creates an allocation heap, and an allocation, reallocation, and dump function for it. You can use this heap to allocate and reallocate data, and then dump it at the end.
 
-The '#hashfunc' directive names the MurMurHash function that is necessary for the process.
+The '//hashfunc=>' directive names the MurMurHash function that is necessary for the process.
 
 Notice that the functions do safe allocations and reallocations; you do not need to check for errors and null pointers. If a returned pointer for calloc and realloc is NULL, it will error out and exit.
 
@@ -77,9 +77,9 @@ Suppose you have a C file named "example.c" with the following content:
 
     // Your existing C code here...
 
-    #alloc heap1, allocate1, reallocate1, dump1
-    #alloc heap2, allocate2, reallocate2, dump2
-    #hashfunc my_hash_function
+    //=>alloc heap1, allocate1, reallocate1, dump1
+    //=>alloc heap2, allocate2, reallocate2, dump2
+    //hashfunc=> my_hash_function
 
     int main() {
         void* int ptr1 = allocate1(sizeof(int));
@@ -142,14 +142,14 @@ The complete text of the GNU General Public License version 3.0 can be found at 
 
 while (<$input_file>) {
     chomp;
-    if (/^#alloc\s+(.+)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*),\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*$/) {
+    if (/^\/\/=>alloc\s+(.+)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*,\s*([a-zA-Z_][a-zA-Z0-9_]*),\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*$/) {
         push @alloc_directives, {
             heap_name       => $1,
             allocfn_name    => $2,
             reallocfn_name  => $3,
             dumpfn_name     => $4,
         };
-    } elsif (/^#hashfunc\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/) {
+    } elsif (/^\/\/hashfunc=>\s+([a-zA-Z_][a-zA-Z0-9_]*)\s*$/) {
         $hash_function_name = $1;
     } else {
         push @bypass_lines, $_;
