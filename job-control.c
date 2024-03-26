@@ -14,9 +14,6 @@
 
 #include "marsh.h"
 
-//=> alloc jc_heap, jc_alloc, jc_realloc, jc_dump
-//=> hashfunc jc_heap_hashfn
-
 typedef enum {
   PSTATE_PENDING,
   PSTATE_RUNNING,
@@ -286,7 +283,7 @@ bool job_is_completed(Job *job) {
 }
 
 Job *create_job(void) {
-  Job *job = jc_alloc(sizeof(Job));
+  Job *job = malloc(sizeof(Job));
 
   if (job == NULL) {
     perror("calloc");
@@ -306,7 +303,7 @@ Job *create_job(void) {
 }
 
 Process *create_process(char **argv, int argc) {
-  Process *process = jc_alloc(sizeof(Process));
+  Process *process = malloc(sizeof(Process));
 
   if (process == NULL) {
     perror("calloc");
@@ -349,3 +346,32 @@ void append_job_to_list(Job *new_job) {
     current_job->next = new_job;
   }
 }
+
+void dump_process_list(Process *head) {
+  if (head == NULL)
+    return;
+
+  for (Process *p = head; p != NULL; p = p->next)
+    free(p);
+}
+
+void dump_job(Job *job) {
+  if (job == NULL)
+    return;
+
+  dump_process_list(job->first_process);
+  free(job);
+}
+
+void dump_job_list(Job *head) {
+  for (Job *j = head; j != NULL; j = j->next)
+    free(j);
+}
+
+void collect_on_job_list(void) {
+  for (Job *j = jobs; j != NULL; j = j->next)
+    if (job_is_stopped(j) || job_is_completed(j))
+      dump_job(j);
+}
+
+void dump_all_jobs(void) { dump_job_list(jobs); }
