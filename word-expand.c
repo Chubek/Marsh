@@ -6,8 +6,8 @@
 
 #include "marsh.h"
 
-#alloc wordexp_heap, wordexp_alloc, wordexp_realloc, wordexp_dump
-#hashfunc wordexp_heap_hashfunc
+//=> alloc wordexp_heap, wordexp_alloc, wordexp_realloc, wordexp_dump
+//=> hashfunc wordexp_heap_hashfunc
 
 typedef struct Symdef {
   const char *name;

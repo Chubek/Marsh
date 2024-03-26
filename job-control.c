@@ -14,8 +14,8 @@
 
 #include "marsh.h"
 
-#alloc jc_heap, jc_alloc, jc_realloc, jc_dump
-#hashfunc jc_heap_hashfn
+//=> alloc jc_heap, jc_alloc, jc_realloc, jc_dump
+//=> hashfunc jc_heap_hashfn
 
 typedef enum {
   PSTATE_PENDING,

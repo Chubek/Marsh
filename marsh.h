@@ -28,4 +28,7 @@ Process *create_process(char **argv, int argc);
 void append_process_to_job(Job *job, Process *process);
 void append_job_to_list(Job *new_job);
 
+typedef struct Symdef Symdef;
+typedef struct Symtbl Symtbl;
+
 #endif
