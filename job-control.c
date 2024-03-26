@@ -14,6 +14,9 @@
 
 #include "marsh.h"
 
+#alloc jc_heap, jc_alloc, jc_realloc, jc_dump
+#hashfunc jc_heap_hashfn
+
 typedef enum {
   PSTATE_PENDING,
   PSTATE_RUNNING,
@@ -22,6 +25,12 @@ typedef enum {
   PSTATE_STOPPED,
   PSTATE_CONTINUED,
 } pstate_t;
+
+typedef enum {
+  JSTATE_PENDING,
+  JSTATE_ACTIVE,
+  JSTATE_SPENT,
+} jstate_t;
 
 typedef struct Process {
   pid_t pid;
@@ -40,6 +49,7 @@ typedef struct Job {
   Process *first_process;
   struct termios tmodes;
   int stdin, stdout, stderr;
+  jstate_t state;
   struct Job *next;
 } Job;
 
@@ -276,10 +286,10 @@ bool job_is_completed(Job *job) {
 }
 
 Job *create_job(void) {
-  Job *job = malloc(sizeof(Job));
+  Job *job = jc_alloc(sizeof(Job));
 
   if (job == NULL) {
-    perror("malloc");
+    perror("calloc");
     exit(EXIT_FAILURE);
   }
 
@@ -296,9 +306,10 @@ Job *create_job(void) {
 }
 
 Process *create_process(char **argv, int argc) {
-  Process *process = malloc(sizeof(Process));
+  Process *process = jc_alloc(sizeof(Process));
+
   if (process == NULL) {
-    perror("malloc");
+    perror("calloc");
     exit(EXIT_FAILURE);
   }
 
