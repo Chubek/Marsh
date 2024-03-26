@@ -1,0 +1,26 @@
+quoted_word = Escaped(uchar esc_chr)
+	    | SingleQuoted(string sq_str)
+	    | DoubleQuoted(shell_word word)
+	    ;
+
+
+special_param = AllPosNormal | AllPosConcat | NumPos | ExitStat | OptFlags | ProcId | ShName ;
+
+
+parameter = Positional(int pos)
+	  | Special(special_param sparam)
+	  | Variable(identifier id)
+	  ;
+
+param_expn = SubParam(boolean colon)
+	   | AssignParam(boolean colon)
+	   | ErrIfNotSet(boolean colon)
+	   | UseAlt(boolean colon)
+	   ;
+
+word_expand = TildeExpn
+	    | ParamExpn(parameter param, param_expn kind, shell_word word)
+	    ;
+
+
+shell_word = Quoted(quoted_word qw) ;
