@@ -1,6 +1,6 @@
 quoted_word = Escaped(uchar esc_chr)
 	    | SingleQuoted(string sq_str)
-	    | DoubleQuoted(shell_word word)
+	    | DoubleQuoted(shell_word* word)
 	    ;
 
 
@@ -33,11 +33,22 @@ param_expn = SubParam(bool colon)
 	   ;
 
 
+arith_expr = BaseWord(shell_word baseshw)
+	   | BaseInt(int basei)
+	   | Add(arith_expr l, arith_expr r)
+	   | Sub(arith_expr l, arith_expr r)
+	   | Mul(arith_expr l, arith_expr r)
+	   | Div(arith_expr l, arith_expr r)
+	   | Mod(arith_expr l, arith_expr r)
+	   | Shl(arith_expr l, arith_expr r)
+	   | Shr(arith_expr l, arith_expr r)
+	   ;
+
 
 word_expand = TildeExpn
-	    | ParamExpn(parameter param, param_expn kind, shell_word word)
+	    | ParamExpn(parameter param, param_expn? kind, shell_word? word)
 	    | CommandSub(command cmd)
-	    | ArithExpn(arithexpr axpr)
+	    | ArithExpn(arith_expr axpr)
 	    ;
 
 
@@ -84,12 +95,14 @@ compound_list = (list* cmpls) ;
 case_cond = (pattern patt, compound_list body) ;
 
 
+if_cond = (compound_list cond, compound_list body) ;
+
 
 compound_command = Subshell(compound_list ls) 
 		 | CurrShell(compound_list ls)
 		 | ForLoop(identifier name, shell_word* wordls, compound_list body)
 		 | CaseCond(shell_word disc, case_cond* conds)
-		 | IfCond(compound_list cond, compound_list then, compound_command* elifs, compound_list? else)
+		 | IfCond(if_cond base, if_cond* elifs, compound_list elsebody)
 		 | WhileLoop(compound_list cond, compound_list body)
 		 | UntilLoop(compound_list cond, compound_list body)
 		 | FuncDef(compound_command* body, redirect? redir)
