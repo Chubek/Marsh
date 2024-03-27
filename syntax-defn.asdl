@@ -48,3 +48,18 @@ shell_word = Quoted(quoted_word qw)
 	   ;
 
 
+redirect = RedirIn(int? rn, shell_word rw)
+	 | RedirOut(int? rn, shell_word rw, boolean clobber)
+	 | AppendOut(int? rn, shell_word rw)
+	 | HereDoc(int? rn, shell_word rw, string rdoc, shell_word rdelim, boolean qrem)
+	 | HereStr(int? rn, shell_word rw, string rstr, shell_word rdelim, boolean qrem)
+	 | DupIn(int? dn, shell_word dw)
+	 | DupOut(int? dn, shell_word dw)
+	 | OpenRW(int? rwn, shell_word rww)
+	 ;
+
+
+
+
+
+
