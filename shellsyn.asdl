@@ -84,6 +84,7 @@ compound_list = (list* cmpls) ;
 case_cond = (pattern patt, compound_list body) ;
 
 
+
 compound_command = Subshell(compound_list ls) 
 		 | CurrShell(compound_list ls)
 		 | ForLoop(identifier name, shell_word* wordls, compound_list body)
@@ -93,4 +94,26 @@ compound_command = Subshell(compound_list ls)
 		 | UntilLoop(compound_list cond, compound_list body)
 		 | FuncDef(compound_command* body, redirect? redir)
 		 ;
+
+
+
+glob_wildchar = MatchAny
+	      | MatchMulti
+	      ;
+
+
+
+glob_sequence = ExactSeq(bytearray seq)
+	      | NegSeq(bytearray seq)
+	      ;
+
+
+
+glob = WildChar(glob_wildchar gwc)
+     | GlobSeq(glob_sequenc gseq)
+     | LitChar(uchar lchr)
+     | LitString(string lstr)
+     ;
+
+
 
