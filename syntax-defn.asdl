@@ -71,7 +71,26 @@ pipeline = NormalPipeline(simple_command* cmdseq)
 
 
 
+list = AsyncLs(pipeline* cmds)
+     | SeqLs(pipeline* cmds)
+     | AndLs(pipeline* cmds)
+     | OrLs(pipeline* cmds)
+     ;
 
 
+compound_list = (list* cmpls) ;
 
+
+case_cond = (pattern patt, compound_list body) ;
+
+
+compound_command = Subshell(compound_list ls) 
+		 | CurrShell(compound_list ls)
+		 | ForLoop(identifier name, shell_word* wordls, compound_list body)
+		 | CaseCond(shell_word disc, case_cond* conds)
+		 | IfCond(compound_list cond, compound_list then, compound_command* elifs, compound_list? else)
+		 | WhileLoop(compound_list cond, compound_list body)
+		 | UntilLoop(compound_list cond, compound_list body)
+		 | FuncDef(compound_command* body, redirect? redir)
+		 ;
 
