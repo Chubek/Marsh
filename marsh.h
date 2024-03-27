@@ -27,6 +27,11 @@ Job *create_job(void);
 Process *create_process(char **argv, int argc);
 void append_process_to_job(Job *job, Process *process);
 void append_job_to_list(Job *new_job);
+void dump_process_list(Process *head);
+void dump_job_list(Job *job);
+void collect_on_job_list(void);
+void dump_job(Job *job);
+void dump_all_jobs(void);
 
 typedef struct Symdef Symdef;
 typedef struct Symtbl Symtbl;
