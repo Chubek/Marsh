@@ -4,7 +4,16 @@ quoted_word = Escaped(uchar esc_chr)
 	    ;
 
 
-special_param = AllPosNormal | AllPosConcat | NumPos | ExitStat | OptFlags | ProcId | ShName ;
+
+special_param = AllPosNormal 
+	      | AllPosConcat 
+	      | NumPos 
+	      | ExitStat 
+	      | OptFlags 
+	      | ProcId 
+	      | ShName 
+	      ;
+
 
 
 parameter = Positional(int pos)
@@ -12,15 +21,30 @@ parameter = Positional(int pos)
 	  | Variable(identifier id)
 	  ;
 
+
+
 param_expn = SubParam(boolean colon)
 	   | AssignParam(boolean colon)
 	   | ErrIfNotSet(boolean colon)
 	   | UseAlt(boolean colon)
+	   | RmPrefix(boolean small)
+	   | RmSuffix(boolean small)
+	   | StrLen
 	   ;
+
+
 
 word_expand = TildeExpn
 	    | ParamExpn(parameter param, param_expn kind, shell_word word)
+	    | CommandSub(command cmd)
+	    | ArithExpn(arithexpr axpr)
 	    ;
 
 
-shell_word = Quoted(quoted_word qw) ;
+
+shell_word = Quoted(quoted_word qw) 
+	   | Parameter(parameter param)
+	   | WordExpn(word_expand expn)
+	   ;
+
+
