@@ -23,12 +23,12 @@ parameter = Positional(int pos)
 
 
 
-param_expn = SubParam(boolean colon)
-	   | AssignParam(boolean colon)
-	   | ErrIfNotSet(boolean colon)
-	   | UseAlt(boolean colon)
-	   | RmPrefix(boolean small)
-	   | RmSuffix(boolean small)
+param_expn = SubParam(bool colon)
+	   | AssignParam(bool colon)
+	   | ErrIfNotSet(bool colon)
+	   | UseAlt(bool colon)
+	   | RmPrefix(bool small)
+	   | RmSuffix(bool small)
 	   | StrLen
 	   ;
 
@@ -49,14 +49,26 @@ shell_word = Quoted(quoted_word qw)
 
 
 redirect = RedirIn(int? rn, shell_word rw)
-	 | RedirOut(int? rn, shell_word rw, boolean clobber)
+	 | RedirOut(int? rn, shell_word rw, bool clobber)
 	 | AppendOut(int? rn, shell_word rw)
-	 | HereDoc(int? rn, shell_word rw, string rdoc, shell_word rdelim, boolean qrem)
-	 | HereStr(int? rn, shell_word rw, string rstr, shell_word rdelim, boolean qrem)
+	 | HereDoc(int? rn, shell_word rw, string rdoc, shell_word rdelim, bool qrem)
+	 | HereStr(int? rn, shell_word rw, string rstr, shell_word rdelim, bool qrem)
 	 | DupIn(int? dn, shell_word dw)
 	 | DupOut(int? dn, shell_word dw)
 	 | OpenRW(int? rwn, shell_word rww)
 	 ;
+
+
+
+simple_command = ExecAssign(identifier lval, shell_word rval)
+	       | ExecSeq(shell_word* cmdseq, redirect? cmdredir)
+	       ;
+
+
+pipeline = NormalPipeline(simple_command* cmdseq)
+	 | NegatedPipeline(simple_command* cmdseq)
+	 ;
+
 
 
 
