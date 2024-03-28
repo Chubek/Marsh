@@ -1,5 +1,5 @@
-quoted_word = Escaped(uchar esc_chr)
-	    | SingleQuoted(string sq_str)
+quoted_word = Escaped(uchar escchr)
+	    | SingleQuoted(string sqstr)
 	    | DoubleQuoted(shell_word* word)
 	    ;
 
@@ -18,7 +18,7 @@ special_param = AllPosNormal
 
 parameter = Positional(int pos)
 	  | Special(special_param sparam)
-	  | Variable(identifier id)
+	  | Variable(identifier name)
 	  ;
 
 
@@ -56,6 +56,7 @@ word_expand = TildeExpn
 shell_word = Quoted(quoted_word qw) 
 	   | Parameter(parameter param)
 	   | WordExpn(word_expand expn)
+	   | GlobPattern(glob_pattern glob)
 	   ;
 
 
@@ -76,31 +77,40 @@ simple_command = ExecAssign(identifier lval, shell_word rval)
 	       ;
 
 
-pipeline = NormalPipeline(simple_command* cmdseq)
+pipeline = BaseCommand(simple_command cmd)
+	 | NormalPipeline(simple_command* cmdseq)
 	 | NegatedPipeline(simple_command* cmdseq)
 	 ;
 
 
 
-list = AsyncLs(pipeline* cmds)
-     | SeqLs(pipeline* cmds)
-     | AndLs(pipeline* cmds)
-     | OrLs(pipeline* cmds)
+list = AsyncLs(pipeline* plns)
+     | SeqLs(pipeline* plns)
+     | AndLs(pipeline* plns)
+     | OrLs(pipeline* plns)
+     | BasePipeline(pipeline pln)
      ;
 
 
-compound_list = (list* cmpls) ;
+compound_list = BaseList(list* basels)
+	      | CompoundList(compound_list* cmpls)
+	      | CompoundCommand(compound_command* ccmd)
+	      ;
 
 
-case_cond = (pattern patt, compound_list body) ;
+case_cond = (glob_pattern patt, compound_list body) ;
 
 
 if_cond = (compound_list cond, compound_list body) ;
 
 
-compound_command = Subshell(compound_list ls) 
+for_words = (shell_word* wordls) ;
+
+
+compound_command = BaseCompound(compound_list cls)
+		 | Subshell(compound_list ls) 
 		 | CurrShell(compound_list ls)
-		 | ForLoop(identifier name, shell_word* wordls, compound_list body)
+		 | ForLoop(identifier name, for_words? wordls, compound_list body)
 		 | CaseCond(shell_word disc, case_cond* conds)
 		 | IfCond(if_cond base, if_cond* elifs, compound_list elsebody)
 		 | WhileLoop(compound_list cond, compound_list body)
@@ -110,23 +120,45 @@ compound_command = Subshell(compound_list ls)
 
 
 
-glob_wildchar = MatchAny
+glob_wildcard = MatchAny
 	      | MatchMulti
 	      ;
 
 
 
-glob_sequence = ExactSeq(bytearray seq)
-	      | NegSeq(bytearray seq)
-	      ;
+glob_class = Alpha
+	   | Alnum
+	   | Digit
+	   | Xdigit
+	   | Punct
+	   | Ctrl
+	   | Graph
+	   | Print
+	   | Blank
+	   | Space
+	   | Lower
+	   | Upper
+	   ;
 
 
 
-glob = WildChar(glob_wildchar gwc)
-     | GlobSeq(glob_sequenc gseq)
-     | LitChar(uchar lchr)
-     | LitString(string lstr)
-     ;
+glob_bracket = ExactBrackSeq(bytearray eseq)
+	     | NegativeBrackSeq(bytearray nseq)
+	     | ClassBrackSeq(glob_class cseq)
+	     ;
 
 
 
+
+glob_element = WildChar(glob_wildcard gwc)
+	     | GlobSeq(glob_bracket gseq)
+	     | LitChar(uchar lchr)
+	     | LitString(string lstr)
+	     ;
+
+
+
+glob_pattern = (glob_element* elems) ;
+
+
+shell_syntax = (compound_command* shsyn) ;
