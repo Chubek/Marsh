@@ -24,7 +24,7 @@ typedef enum {
 } fstate_t;
 
 struct FDescTblNode {
-  char fpath[FILENAME_MAX + 1];
+  char fpath[FILESYM_MAX + 1];
   int fno;
   fdstate_t status;
   FDescTblNode *next;
@@ -36,16 +36,16 @@ struct FDescTbl {
 };
 
 typedef enum {
-  NAME_STRING,
-  NAME_PATTERN,
-  NAME_PARAMETER,
-  NAME_COMMAND,
-  NAME_SPECIAL,
-} namekind_t;
+  SYM_STRING,
+  SYM_PATTERN,
+  SYM_PARAMETER,
+  SYM_COMMAND,
+  SYM_SPECIAL,
+} symkind_t;
 
-struct NameTblNode {
+struct SymTblNode {
   char ident[UCHAR_MAX + 1];
-  namekind_t kind;
+  symkind_t kind;
   union {
     char *string;
     Pattern *pattern;
@@ -53,13 +53,15 @@ struct NameTblNode {
     Command *command;
     Special *special;
   };
-  NameTblNode *next;
+  SymTblNode *next;
 };
 
-struct NameTbl {
-  NameTblNode *bucket[MAX_BUCKET];
+struct SymTbl {
+  SymTblNode *bucket[MAX_BUCKET];
   void *cache[MAX_CACHE];
 };
+
+
 
 struct FuncTblNode {
   char ident[UCHAR_MAX + 1];

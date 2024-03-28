@@ -25,7 +25,7 @@ struct Stdio {
 };
 
 struct Command {
-  char *util_name;
+  char *util_sym;
   char **arguments;
   size_t num_arguments;
   Stdio *io;
@@ -53,7 +53,7 @@ struct Environ {
   Job *foreground_job;
   Job **background_jobs;
   FDescTbl *fd_table;
-  NameTbl *name_table;
+  SymTbl *sym_table;
   FunTbl *func_table;
   bool interactive;
 };

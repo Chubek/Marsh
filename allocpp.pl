@@ -35,7 +35,7 @@ my $hash_function_name;
 my $hash_function;
 
 
-=head1 NAME
+=head1 SYM
 
 AllocPP.pl - Perl script for generating static allocation heaps in C
 
