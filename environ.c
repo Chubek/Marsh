@@ -6,6 +6,7 @@
 #include <string.h>
 #include <sys/stat.h>
 #include <sys/wait.h>
+#include <termios.h>
 #include <unistd.h>
 
 #include "marsh.h"
@@ -60,10 +61,12 @@ struct Job {
 struct Environ {
   Job *foreground_job;
   Job **background_jobs;
+  size_t num_background_jobs;
   FDescTbl *fd_table;
   SymTbl *sym_table;
   FuncTbl *func_table;
   bool interactive;
+  int shell_fdesc;
 };
 
 Stdio *create_stdio(int fno_in, int fno_out, int fno_err) {
@@ -125,9 +128,11 @@ Process *duplicate_process(Process *process) {
   return (Process *)memmove(process_copy, process, sizeof(Process));
 }
 
-void add_next_process(Process **head, Process *next) {
-  next->next = *head;
-  *head = next;
+void push_next_process(Process *head, Process *next) {
+  Process *p;
+  for (p = *head; p->next != NULL; p = p->next)
+    ;
+  p->next = next;
 }
 
 static inline void set_process_self_id(Process *process, pid_t self_id) {
@@ -136,4 +141,32 @@ static inline void set_process_self_id(Process *process, pid_t self_id) {
 
 static inline void set_process_group_id(Process *process, pid_t group_id) {
   process->group_id = group_id;
+}
+
+Job *create_job(bool foreground) {
+  Job *job = (Job *)job_alloc(sizeof(Job));
+  job->group_id = -1;
+  job->foreground = foreground;
+  job->first_process = NULL;
+  job->next = NULL;
+  return job;
+}
+
+void push_next_job(Job *job, Job *next) {
+  Job *j;
+  for (j = job; j->next != NULL; j = j->next)
+    ;
+  j->next = next;
+}
+
+static inline void push_job_next_process(Job *job, Process *next_process) {
+  push_next_process(job->first_process, next_process);
+}
+
+static inline void set_job_group_id(Job *job, pid_t group_id) {
+  job->group_id = group_id;
+}
+
+static inline void set_job_terminal_attributes(Job *job, int shell_fd) {
+  tcgetattr(shell_fd, &job->tmodes);
 }
