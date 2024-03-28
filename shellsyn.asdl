@@ -7,11 +7,11 @@ quoted_word = Escaped(uchar escchr)
 
 special_param = AllPosNormal 
 	      | AllPosConcat 
-	      | NumPos 
+	      | NumArgs
 	      | ExitStat 
 	      | OptFlags 
 	      | ProcId 
-	      | ShName 
+	      | ScriptName 
 	      ;
 
 
@@ -47,7 +47,7 @@ arith_expr = BaseWord(shell_word baseshw)
 
 word_expand = TildeExpn
 	    | ParamExpn(parameter param, param_expn? kind, shell_word? word)
-	    | CommandSub(command cmd)
+	    | CommandSub(compound_list cmd)
 	    | ArithExpn(arith_expr axpr)
 	    ;
 
@@ -159,6 +159,7 @@ glob_element = WildChar(glob_wildcard gwc)
 
 
 glob_pattern = (glob_element* elems) ;
+
 
 
 shell_syntax = (compound_command* shsyn) ;
