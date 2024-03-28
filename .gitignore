@@ -52,4 +52,6 @@ parse.h
 *.info
 
 # ASDL generated files
-*.syngen.h
+*.syngen.*
+*-syngen.*
+
