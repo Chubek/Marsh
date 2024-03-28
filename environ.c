@@ -54,6 +54,6 @@ struct Environ {
   Job **background_jobs;
   FDescTbl *fd_table;
   SymTbl *sym_table;
-  FunTbl *func_table;
+  FuncTbl *func_table;
   bool interactive;
 };
