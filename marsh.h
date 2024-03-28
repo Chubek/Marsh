@@ -11,5 +11,11 @@ typedef struct Command Command;
 typedef struct Process Process;
 typedef struct Job Job;
 typedef struct Environ Environ;
+typedef struct FDescTblNode FDescTblNode;
+typedef struct FDescTbl FDescTbl;
+typedef struct SymTblNode SymTblNode;
+typedef struct SymTbl SymTbl;
+typedef struct FuncTblNode FuncTblNode;
+typedef struct FuncTbl FuncTbl;
 
 #endif
