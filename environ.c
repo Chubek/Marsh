@@ -49,7 +49,7 @@ struct Job {
   Job *next;
 };
 
-struct Control {
+struct Environ {
   Job *foreground_job;
   Job **background_jobs;
   FDescTbl *fd_table;
