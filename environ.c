@@ -11,6 +11,8 @@
 
 #include "marsh.h"
 
+/* envdefs.c: Definitions for the Marsh shell environment */
+
 // NOTE: Preprocess with allocpp.pl
 //=> alloc redir_heap, redir_alloc, redir_realloc, redir_dump
 //=> alloc command_heap, command_alloc, command_realloc, command_dump
@@ -19,6 +21,30 @@
 //=> alloc env_heap, env_alloc, env_realloc, env_dump
 //=> hashfunc environ_hash_func
 
+// A. IO Definitions
+
+typedef enum {
+  REDIR_READ = (1 << 1),
+  REDIR_WRITE = (1 << 2),
+  REDIR_APPEND = (1 << 3),
+  REDIR_CLOSE = (1 << 4),
+} redirflags_t;
+
+struct Redirection {
+  char *target;
+  int fdesc;
+  bool target_fdesc;
+  redirflags_t flags;
+};
+
+struct FDescState {
+  int fno_in;
+  int fno_out;
+  int fno_err;
+};
+
+// B. Process & Command Definitions
+
 typedef enum {
   PSTAT_PENDING,
   PSTAT_RUNNING,
@@ -26,24 +52,6 @@ typedef enum {
   PSTAT_COMPLETE,
   PSTAT_TERMINATED,
 } pstat_t;
-
-typedef enum {
-  REDIR_FILE_IN,
-  REDIR_FDESC_IN,
-  REDIR_FILE_OUT,
-  REDIR_FDESC_OUT,
-  REDIR_FILE_APPEND,
-  REDIR_FDESC_APPEND,
-  REDIR_HERE_NORMAL,
-  REDIR_HERE_EXPAND,
-  REDIR_FILE_RW,
-} redirkind_t;
-
-struct Redirection {
-  char *source_word;
-  char *target_word;
-  redirkind_t kind;
-};
 
 struct Command {
   char *util_name;
@@ -60,13 +68,15 @@ struct Process {
   Process *next;
 };
 
+// C. Job & Environment Definitions
+
 struct Job {
   pid_t group_id;
   bool foreground;
   bool async;
-  struct termios tmodes;
+  FDescState fd_state;
+  struct termios term_state;
   Process *first_process;
-  int fno_in, fno_out, fno_err;
   Job *next;
 };
 
@@ -81,12 +91,15 @@ struct Environ {
   int shell_fdesc;
 };
 
-Redirection *create_redirection(redirkind_t kind, char *source_word,
-                                char *target_word) {
+// D. Redirection Factory Functions
+
+Redirection *create_redirection(redirflags_t flags, char *target,
+                                bool target_fdesc, int fdesc) {
   Redirection *redir = (Redirection *)redir_alloc(sizeof(Redir));
-  redir->source_word = duplicate_string(source_word);
-  redir->target_word = duplicate_string(target_word);
-  redir->kind = kind;
+  redir->target = duplicate_string(target);
+  redir->fdesc = duplicate_string(fdesc);
+  redir->target_fdesc = target_fdesc;
+  redir->flags = flags;
   return redir;
 }
 
@@ -94,6 +107,8 @@ Redirection *duplicate_redir(Redirection *redir) {
   Redirection *redir_copy = (Redirection *)redir_alloc(sizeof(Redirection));
   return memmove(redir_copy, redir, sizeof(Redirection));
 }
+
+// E. Process & Command Factory Functions
 
 Command *create_command(char *util_name, char **arguments,
                         size_t num_arguments) {
@@ -144,6 +159,8 @@ static inline void set_process_group_id(Process *process, pid_t group_id) {
   process->group_id = group_id;
 }
 
+// F. Job & Environment Factory Functions
+
 Job *create_job(bool foreground, bool async) {
   Job *job = (Job *)job_alloc(sizeof(Job));
   job->group_id = -1;
@@ -169,75 +186,6 @@ static inline void set_job_group_id(Job *job, pid_t group_id) {
   job->group_id = group_id;
 }
 
-static inline void set_job_terminal_attributes(Job *job, int shell_fd) {
-  tcgetattr(shell_fd, &job->tmodes);
-}
-
-pid_t execute_command(Command *command, int *group_id, int prev_in,
-                      int *next_in) {
-  int pipe_out[2], fno_in = -1, fno_out = -1, fno_err = -1;
-  pid_t child_pid;
-
-  if (pipe(pipe_out) < 0) {
-    runtime_error(RTMERR_NONFATAL | RTMERR_IO, "Failed to create pipe");
-    ABORT_FORK();
-  }
-
-  if ((child_pid = fork) < 0) {
-    runtime_error(RTMERR_NONFATAL | RTMERR_PROCESS,
-                  "Failed to fork the parent process");
-    ABORT_FORK();
-
-  } else if (!child_pid) {
-    if (*group_id == -1)
-      *group_id = getpgrp();
-    else
-      setpgid(*group_id);
-
-    if (command->redir != NULL) {
-      if (hook_redir(command->redir, &fno_in, &fno_out, &fno_err) == -1) {
-        runtime_error(RTMERR_NONFATAL | RTMERR_IO, "Failed to redirect output");
-        ABORT_EXEC();
-      }
-    }
-
-    if (fno_in == -1 && prev_in == -1)
-      fno_in = STDIN_FILENO;
-    else if (fno_in == -1 && prev_in > 0)
-      fno_in = prev_in;
-
-    if (*next_in != -1) {
-      if (dup2(pipe_out[1], fno_out) < 0) {
-        runtime_error(RTMERR_NONFATAL | RTMERR_IO, "Failed to pipe output");
-        ABORT_EXEC();
-      }
-
-      *next_in = pipe_out[0];
-      close(pipe_out[0]);
-      close(pipe_out[1]);
-    }
-
-    if (command->arguments[command->num_arguments - 1] != NULL) {
-      command->arguments = (char **)command_realloc(
-          command->arguments, (command->num_arguments + 1) * sizeof(char *));
-      command->arguments[command->num_arguments++] = NULL;
-    }
-
-    execlp(command->util_name, command->arguments);
-    runtime_error(RTMERR_FATAL | RTMERR_EXEC, "Execution failed");
-    ABORT_POSTEXEC();
-  }
-
-  close(pipe_out[0]);
-  close(pipe_out[1]);
-
-  if (prev_in != -1)
-    close(prev_in);
-
-  return child_pid;
-}
-
-pid_t launch_process_chain(Process *root, bool async) {
-  Process *p;
-  // TODO
+static inline void set_job_terminal_state(Job *job, int shell_fd) {
+  tcgetattr(shell_fd, &job->term_state);
 }
