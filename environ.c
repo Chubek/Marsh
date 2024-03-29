@@ -56,9 +56,7 @@ struct Process {
   pid_t self_id;
   pid_t group_id;
   Command *command;
-  bool async;
   pstate_t status;
-  int fno_in, fno_out, fno_err;
   Process *next;
 };
 
@@ -68,6 +66,7 @@ struct Job {
   bool async;
   struct termios tmodes;
   Process *first_process;
+  int fno_in, fno_out, fno_err;
   Job *next;
 };
 
@@ -115,12 +114,10 @@ static inline void set_command_redir(Command *command, Redirection *redir) {
   command->io = duplicate_redirection(redir);
 }
 
-Process *create_process(Command *command, bool async, bool piped) {
+Process *create_process(Command *command) {
   Process *process = (Process *)process_alloc(sizeof(Process));
   process->self_id = process->group_id = -1;
   process->command = command;
-  process->async = async;
-  process->piped = piped;
   process->fno_in = process->fno_out = process->fno_err = -1;
   process->state = PSTAT_PENDING;
   process->next = NULL;
@@ -176,7 +173,8 @@ static inline void set_job_terminal_attributes(Job *job, int shell_fd) {
   tcgetattr(shell_fd, &job->tmodes);
 }
 
-pid_t execute_command(Command *command, int prev_in, int *next_in) {
+pid_t execute_command(Command *command, int *group_id, int prev_in,
+                      int *next_in) {
   int pipe_out[2], fno_in = -1, fno_out = -1, fno_err = -1;
   pid_t child_pid;
 
@@ -191,6 +189,11 @@ pid_t execute_command(Command *command, int prev_in, int *next_in) {
     ABORT_FORK();
 
   } else if (!child_pid) {
+    if (*group_id == -1)
+      *group_id = getpgrp();
+    else
+      setpgid(*group_id);
+
     if (command->redir != NULL) {
       if (hook_redir(command->redir, &fno_in, &fno_out, &fno_err) == -1) {
         runtime_error(RTMERR_NONFATAL | RTMERR_IO, "Failed to redirect output");
@@ -203,7 +206,7 @@ pid_t execute_command(Command *command, int prev_in, int *next_in) {
     else if (fno_in == -1 && prev_in > 0)
       fno_in = prev_in;
 
-    if (next_in != NULL) {
+    if (*next_in != -1) {
       if (dup2(pipe_out[1], fno_out) < 0) {
         runtime_error(RTMERR_NONFATAL | RTMERR_IO, "Failed to pipe output");
         ABORT_EXEC();
@@ -234,5 +237,7 @@ pid_t execute_command(Command *command, int prev_in, int *next_in) {
   return child_pid;
 }
 
-
-
+pid_t launch_process_chain(Process *root, bool async) {
+  Process *p;
+  // TODO
+}
