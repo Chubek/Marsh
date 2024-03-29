@@ -11,16 +11,6 @@
 
 #include "marsh.h"
 
-/* envdefs.c: Definitions for the Marsh shell environment */
-
-// NOTE: Preprocess with allocpp.pl
-//=> alloc redir_heap, redir_alloc, redir_realloc, redir_dump
-//=> alloc command_heap, command_alloc, command_realloc, command_dump
-//=> alloc proc_heap, proc_alloc, proc_realloc, proc_dump
-//=> alloc job_heap, job_alloc, job_realloc, job_dump
-//=> alloc env_heap, env_alloc, env_realloc, env_dump
-//=> hashfunc environ_hash_func
-
 // A. IO Definitions
 
 typedef enum {
