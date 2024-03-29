@@ -40,8 +40,8 @@ typedef enum {
 } redirkind_t;
 
 struct Redirection {
-  char word_source[FILENAME_MAX + 1];
-  char word_target[FILENAME_MAX + 1];
+  char *source_word;
+  char *target_word;
   redirkind_t kind;
 };
 
@@ -86,9 +86,9 @@ struct Environ {
 Redirection *create_redirection(redirkind_t kind, char *source_word,
                                 char *target_word) {
   Redirection *redir = (Redirection *)redir_alloc(sizeof(Redir));
+  redir->source_word = duplicate_string(source_word);
+  redir->target_word = duplicate_string(target_word);
   redir->kind = kind;
-  strncat(&redir->source_word[0], source_word, FILENAME_MAX);
-  strncat(&redir->target_word[0], target_word, FILENAME_MAX);
   return redir;
 }
 
