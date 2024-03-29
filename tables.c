@@ -1,7 +1,7 @@
 #include <limits.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
+#include <redirection.h>
 #include <stdlib.h>
 #include <string.h>
 
@@ -66,7 +66,7 @@ struct SymTbl {
 struct FuncTblNode {
   char ident[UCHAR_MAX + 1];
   Function *fundef;
-  Stdio *redir;
+  Redirection *redir;
   FuncTblNode *next;
 };
 

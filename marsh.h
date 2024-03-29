@@ -3,10 +3,10 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
+#include <redirection.h>
 #include <stdlib.h>
 
-typedef struct Stdio Stdio;
+typedef struct Redirection Redirection;
 typedef struct Command Command;
 typedef struct Process Process;
 typedef struct Job Job;
