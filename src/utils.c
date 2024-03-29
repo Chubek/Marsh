@@ -1,10 +1,10 @@
-i#include <stdbool.h>
+i #include<stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-struct Arena {
+    struct Arena {
   char *next;
   char *end;
   char buffer[];
