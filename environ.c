@@ -1,7 +1,7 @@
+#include <redirection.h>
 #include <signal.h>
 #include <stdbool.h>
 #include <stdint.h>
-#include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <sys/stat.h>
@@ -12,8 +12,8 @@
 #include "marsh.h"
 
 // NOTE: Preprocess with allocpp.pl
-//=> alloc io_heap, io_alloc, io_realloc, io_dump
-//=> alloc cmd_heap, cmd_alloc, cmd_realloc, cmd_dump
+//=> alloc redir_heap, redir_alloc, redir_realloc, redir_dump
+//=> alloc command_heap, command_alloc, command_realloc, command_dump
 //=> alloc proc_heap, proc_alloc, proc_realloc, proc_dump
 //=> alloc job_heap, job_alloc, job_realloc, job_dump
 //=> alloc env_heap, env_alloc, env_realloc, env_dump
@@ -27,17 +27,29 @@ typedef enum {
   PSTAT_TERMINATED,
 } pstat_t;
 
-struct Stdio {
-  int fno_in;
-  int fno_out;
-  int fno_err;
+typedef enum {
+  REDIR_FILE_IN,
+  REDIR_FDESC_IN,
+  REDIR_FILE_OUT,
+  REDIR_FDESC_OUT,
+  REDIR_FILE_APPEND,
+  REDIR_FDESC_APPEND,
+  REDIR_HERE_NORMAL,
+  REDIR_HERE_EXPAND,
+  REDIR_FILE_RW,
+} redirkind_t;
+
+struct Redirection {
+  char word_source[FILENAME_MAX + 1];
+  char word_target[FILENAME_MAX + 1];
+  redirkind_t kind;
 };
 
 struct Command {
-  char *util_sym;
+  char *util_name;
   char **arguments;
   size_t num_arguments;
-  Stdio *io;
+  Redirection *redir;
 };
 
 struct Process {
@@ -47,12 +59,14 @@ struct Process {
   bool async;
   bool piped;
   pstate_t status;
+  int fno_in, fno_out, fno_err;
   Process *next;
 };
 
 struct Job {
   pid_t group_id;
   bool foreground;
+  bool async;
   struct termios tmodes;
   Process *first_process;
   Job *next;
@@ -69,33 +83,24 @@ struct Environ {
   int shell_fdesc;
 };
 
-Stdio *create_stdio(int fno_in, int fno_out, int fno_err) {
-  Stdio *stdio = (Stdio *)io_alloc(sizeof(Stdio));
-  stdio->fno_in = fno_in;
-  stdio->fno_out = fno_out;
-  stdio->fno_err = fno_err;
-  return stdio;
+Redirection *create_redirection(redirkind_t kind, char *source_word,
+                                char *target_word) {
+  Redirection *redir = (Redirection *)redir_alloc(sizeof(Redir));
+  redir->kind = kind;
+  strncat(&redir->source_word[0], source_word, FILENAME_MAX);
+  strncat(&redir->target_word[0], target_word, FILENAME_MAX);
+  return redir;
 }
 
-Stdio *duplicate_stdio(Stdio *stdio) {
-  Stdio *stdio_copy = (Stdio *)io_alloc(sizeof(Stdio));
-  return (Stdio *)memmove(stdio_copy, stdio, sizeof(Stdio));
+Redirection *duplicate_redir(Redirection *redir) {
+  Redirection *redir_copy = (Redirection *)redir_alloc(sizeof(Redirection));
+  return memmove(redir_copy, redir, sizeof(Redirection));
 }
 
-static inline Stdio *create_stdio_standard(void) {
-  return create_stdio(STDIN_FILENO, STDOUT_FILENO, STDERR_FILENO);
-}
-
-void set_stdio_in(Stdio *stdio, int fno_in) { stdio->fno_in = fno_in; }
-
-void set_stdio_out(Stdio *stdio, int fno_out) { stdio->fno_out = fno_out; }
-
-void set_stdio_err(Stdio *stdio, int fno_err) { stdio->fno_err = fno_err; }
-
-Command *create_command(char *util_sym, char **arguments,
+Command *create_command(char *util_name, char **arguments,
                         size_t num_arguments) {
   Command *command = (Command *)command_alloc(sizeof(Command));
-  command->util_sym = duplicate_string(util_sym);
+  command->util_name = duplicate_string(util_name);
   command->arguments = duplicate_strings(arguments, num_arguments);
   command->num_arguments = num_arguments;
   command->io = NULL;
@@ -107,17 +112,17 @@ Command *duplicate_command(Command *command) {
   return (Command *)memmove(command_copy, command, sizeof(Command));
 }
 
-static inline void set_command_io(Command *command, Stdio *io) {
-  command->io = duplicate_stdio(io);
+static inline void set_command_redir(Command *command, Redirection *redir) {
+  command->io = duplicate_redirection(redir);
 }
 
 Process *create_process(Command *command, bool async, bool piped) {
   Process *process = (Process *)process_alloc(sizeof(Process));
-  process->self_id = -1;
-  process->group_id = -1;
+  process->self_id = process->group_id = -1;
   process->command = command;
   process->async = async;
   process->piped = piped;
+  process->fno_in = process->fno_out = process->fno_err = -1;
   process->state = PSTAT_PENDING;
   process->next = NULL;
   return process;
@@ -143,9 +148,10 @@ static inline void set_process_group_id(Process *process, pid_t group_id) {
   process->group_id = group_id;
 }
 
-Job *create_job(bool foreground) {
+Job *create_job(bool foreground, bool async) {
   Job *job = (Job *)job_alloc(sizeof(Job));
   job->group_id = -1;
+  job->async = async;
   job->foreground = foreground;
   job->first_process = NULL;
   job->next = NULL;
