@@ -67,4 +67,19 @@ void push_job_next_process(Job *job, Process *next_process);
 void set_job_group_id(Job *job, pid_t group_id);
 void set_job_terminal_state(Job *job, int shell_fd);
 
+
+// E. Arena/Pool/Region Utility Functions and Datatypes
+
+typedef struct Arena Arena;
+
+Arena *arena_init(size_t size);
+void *arena_alloc(Arena *arena, size_t size);
+void arena_reset(Arena *arena);
+void arena_free(Arena *arena);
+
+
+
+
+
+
 #endif

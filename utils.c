@@ -1,14 +1,14 @@
-#include <stdbool.h>
+i#include <stdbool.h>
 #include <stdint.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 
-typedef struct {
+struct Arena {
   char *next;
   char *end;
   char buffer[];
-} Arena;
+};
 
 Arena *arena_init(size_t size) {
   Arena *arena = malloc(sizeof(Arena) + size);
