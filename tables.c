@@ -5,14 +5,6 @@
 #include <stdlib.h>
 #include <string.h>
 
-#ifndef MAX_BUCKET
-#define MAX_BUCKET 4096
-#endif
-
-#ifndef MAX_CACHE
-#define MAX_CACHE 1024
-#endif
-
 #include "marsh.h"
 
 typedef uint16_t hash_t;
@@ -24,7 +16,7 @@ typedef enum {
 } fstate_t;
 
 struct FDescTblNode {
-  char fpath[FILESYM_MAX + 1];
+  char fpath[FILEPATH_MAX + 1];
   int fno;
   fdstate_t status;
   FDescTblNode *next;
@@ -44,7 +36,7 @@ typedef enum {
 } symkind_t;
 
 struct SymTblNode {
-  char ident[UCHAR_MAX + 1];
+  char ident[MAX_IDENT + 1];
   symkind_t kind;
   union {
     char *string;
@@ -64,7 +56,7 @@ struct SymTbl {
 
 
 struct FuncTblNode {
-  char ident[UCHAR_MAX + 1];
+  char ident[MAX_IDENT + 1];
   Function *fundef;
   Redirection *redir;
   FuncTblNode *next;
