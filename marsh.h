@@ -3,9 +3,10 @@
 
 #include <stdbool.h>
 #include <stdint.h>
-#include <redirection.h>
+#include <stdio.h>
 #include <stdlib.h>
 
+typedef struct FDescState FDescState;
 typedef struct Redirection Redirection;
 typedef struct Command Command;
 typedef struct Process Process;
