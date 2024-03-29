@@ -58,6 +58,7 @@ struct Process {
   bool is_async;
   int fno_in, fno_out, fno_err;
   Process *next_p;
+  Arena *scratch;
 };
 
 struct Job {
@@ -68,6 +69,7 @@ struct Job {
   struct termios tmodes;
   Process *first_p;
   Job *next_j;
+  Arena *scratch;
 };
 
 struct Environ {
@@ -79,4 +81,8 @@ struct Environ {
   sigflags_t sigflags;
   Job *first_j_fg;
   Job *first_j_bg;
+  Arena *scratch;
 };
+
+
+
