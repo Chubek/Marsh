@@ -133,7 +133,6 @@ Process *create_process(Command *command) {
   Process *process = (Process *)process_alloc(sizeof(Process));
   process->self_id = process->group_id = -1;
   process->command = command;
-  process->fno_in = process->fno_out = process->fno_err = -1;
   process->state = PSTAT_PENDING;
   process->next = NULL;
   return process;
