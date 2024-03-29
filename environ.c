@@ -221,7 +221,7 @@ pid_t execute_command(Command *command, int prev_in, int *next_in) {
     }
 
     execlp(command->util_name, command->arguments);
-    runtime_error(RTMERR_FATAL | RTERR_EXEC, "Execution failed");
+    runtime_error(RTMERR_FATAL | RTMERR_EXEC, "Execution failed");
     ABORT_POSTEXEC();
   }
 
