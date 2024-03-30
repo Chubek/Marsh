@@ -83,6 +83,3 @@ struct Environ {
   Job *first_j_bg;
   Arena *scratch;
 };
-
-
-
