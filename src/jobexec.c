@@ -51,6 +51,8 @@ struct Process {
   pid_t pgrpid;
   pstate_t state;
   ioflags_t ioflags;
+  char *io_word;
+  int io_num;
   int exit_stat;
   char *cmd_path;
   char **argv;
@@ -73,9 +75,9 @@ struct Job {
 };
 
 struct Environ {
-  pid_t shsid;
-  int tfno;
-  char *cwd;
+  pid_t session_id;
+  int tty_fdesc;
+  char *working_dir;
   char **env_vars;
   int last_bg_job_id;
   sigflags_t sigflags;
