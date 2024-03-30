@@ -60,3 +60,25 @@ struct IOSym {
     IOSYM_ERR,
   } kind;
 };
+
+
+struct Symtbl {
+   WordSym *word_stab[MAX_HASHBUCKET];
+   CmdSym *cmd_stab[MAX_HASHBUCKET];
+   IOSym *io_stab[MAX_HASHBUCKET];
+   Arena *scratch;
+};
+
+
+
+
+
+
+
+
+
+
+
+
+
+
