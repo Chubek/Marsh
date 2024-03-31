@@ -6,6 +6,8 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+#include "utils.h"
+
 #ifndef MAX_BUCKET
 #define MAX_BUCKET (1 << 12)
 #endif
@@ -45,12 +47,12 @@ bool is_word_reserved(Symtbl *tbl, char *name);
 BuiltinCallback *get_builtin_callback(Symtbl *tbl, char *name);
 Function *get_function(Symtbl *tbl, char *name);
 
-void create_io_bindings(Symtbl *tbl, char *word);
+void create_io_bindings(Symtbl *tbl, char *word, iosymkind_t kind);
 int get_io_fdesc(Symtbl *tbl, char *word);
 FILE *get_io_stream(Symtbl *tbl, char *word);
 void destroy_io_stream(Symtbl *tbl, char *word);
 
-Symtbl *init_symtbl(void);
+Symtbl *init_symtbl(Arena *scratch);
 void free_symtbl(Symtbl *tbl);
 
 #endif
