@@ -65,9 +65,9 @@ struct IOSym {
 };
 
 struct Symtbl {
-  WordSym *word_stab[MAX_HASHBUCKET];
-  CmdSym *cmd_stab[MAX_HASHBUCKET];
-  IOSym *io_stab[MAX_HASHBUCKET];
+  WordSym *word_stab[MAX_BUCKET];
+  CmdSym *cmd_stab[MAX_BUCKET];
+  IOSym *io_stab[MAX_BUCKET];
   Arena *scratch;
 };
 
