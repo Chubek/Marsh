@@ -19,6 +19,8 @@ Job *push_blank_job_to_environ(Environ *env, int job_id);
 Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
                       char **env_vars, sigflags_t sigflags);
 
+int handle_process_redirect(Process *process);
+
 void execute_process(Process *process);
 void execute_job(Job *job);
 
