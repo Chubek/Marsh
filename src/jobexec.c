@@ -61,6 +61,7 @@ struct Process {
   size_t argc;
   bool is_async;
   int fno_in, fno_out, fno_err;
+  int next_read, prev_write;
   Process *next_p;
   Arena *scratch;
 };
@@ -120,6 +121,9 @@ Process *push_blank_process_to_job(Job *job, ioflags_t io_flags, char *io_word,
   p->fno_out = STDOUT_FILENO;
   p->fno_err = STDERR_FILENO;
 
+  p->next_read = -1;
+  p->prev_write = -1;
+
   return p;
 }
 
@@ -168,4 +172,66 @@ Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
   env->scratch = arena_init(ENVIRON_INIT_ARENA_SIZE);
 
   return env;
+}
+
+void execute_process(Process *process, char **env_vars) {
+  int channel[2];
+  pid_t id = process->pid = fork();
+
+  if (process->pgrpid == -1) {
+    if ((process->pgrpid = getgpid(0)) == 0) {
+      fputs("Runtime Error: Failed to obtain process' group id\n", stderr);
+      process->state = PSTATE_ABORTED;
+      return;
+    }
+  } else {
+    if (setgpid(id, process->pgrpid) < 0) {
+      fputs("Runtime Error: Failed to set process' group id\n", stderr);
+      process->state = PSTATE_ABORTED;
+      return;
+    }
+  }
+
+  if (id < 0) {
+    fputs("Runtime Error: Failed to spawn child process\n", stderr);
+    process->state = PSTATE_ABORTED;
+    return;
+  }
+
+  if (pipe(channel) < 0) {
+    fputs("Runtime Error: Failed to establish pipe\n", stderr);
+    process->state = PSTATE_ABORTED;
+    return;
+  }
+
+  if (!id) {
+    CLOSE_READ_END(channel);
+
+    if (handle_process_redirect(process) == -1) {
+      fputs("Runtime Error: Failed to redirect process\n", stderr);
+      process->state = PSTATE_ABORTED;
+      return;
+    }
+
+    if (dup2(pipe[1], process->fno_out) < 0) {
+      fputs("Runtime Error: Failed to duplicate output channel\n", stderr);
+      process->state = PSTATE_ABORTED;
+      return;
+    }
+
+    p->next_read = dup(pipe[1]);
+    CLOSE_WRITE_END(channel);
+
+    null_terminate_list(process->argv, process->argc);
+    execlpe(process->cmd_path, process->argv, env_vars);
+
+    fprintf(stderr, "Runtime Error: Failed to launch %s\n", process->cmd_path);
+    return;
+  }
+
+  CLOSE_WRITE_END(channel);
+  process->prev_write = dup(pipe[0]);
+  CLOSE_READ_END(channel);
+
+  process->state = PSTATE_RUNNING;
 }
