@@ -19,11 +19,11 @@ Job *push_blank_job_to_environ(Environ *env, int job_id);
 Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
                       char **env_vars, sigflags_t sigflags);
 
-void execute_process(Process *p);
-void execute_job(Job *j);
+void execute_process(Process *process);
+void execute_job(Job *job);
 
-void free_process(Process *p);
-void free_job(Job *j);
-void free_environ(Environ *e);
+void free_process(Process *process);
+void free_job(Job *job);
+void free_environ(Environ *env);
 
 #endif
