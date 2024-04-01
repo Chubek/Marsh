@@ -18,6 +18,10 @@ typedef enum {
   PSTATE_RUNNING,
   PSTATE_COMPLETED,
   PSTATE_ABORTED,
+  PSTATE_STOPPED,
+  PSTATE_TERMINATED,
+  PSTATE_EXITED,
+  PSTATE_UNKNOWN,
 } pstate_t;
 
 typedef enum {
@@ -50,12 +54,14 @@ typedef enum IOFlags {
 
 struct Process {
   pid_t pid;
-  pid_t pgrpid;
+  pid_t pgroup_id;
   pstate_t state;
   ioflags_t ioflags;
   char *io_word;
   int io_num;
   int exit_stat;
+  int stop_stat;
+  int term_stat;
   char *cmd_path;
   char **argv;
   size_t argc;
@@ -67,7 +73,7 @@ struct Process {
 
 struct Job {
   int job_id;
-  pid_t grpid;
+  pid_t jgroup_id;
   jstate_t state;
   bool user_notified;
   struct termios tmodes;
@@ -113,7 +119,10 @@ Process *push_blank_process_to_job(Job *job, ioflags_t io_flags, char *io_word,
 
   p->state = PSTATE_PENDING;
   p->pid = -1;
-  p->pgrpid = job->grpid;
+  p->pgroup_id = job->jgroup_id;
+
+  p->exit_stat = -1;
+  p->stop_stat = -1;
   p->exit_stat = -1;
 
   p->fno_in = STDIN_FILENO;
@@ -137,7 +146,7 @@ Job *push_blank_job_to_environ(Environ *env, int job_id) {
   }
 
   j->job_id = job_id;
-  j->grpid = -1;
+  j->jgroup_id = -1;
 
   j->state = JSTATE_PENDING;
   j->user_notified = false;
@@ -174,14 +183,14 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
   pid_t id = process->pid = fork();
   int channel[2];
 
-  if (process->pgrpid == -1) {
-    if ((process->pgrpid = getgpid(0)) == 0) {
+  if (process->pgroup_id == -1) {
+    if ((process->pgroup_id = getgpid(0)) < 0) {
       fputs("Runtime Error: Failed to obtain process' group id\n", stderr);
       process->state = PSTATE_ABORTED;
       return;
     }
   } else {
-    if (setgpid(id, process->pgrpid) < 0) {
+    if (setgpid(id, process->pgroup_id) < 0) {
       fputs("Runtime Error: Failed to set process' group id\n", stderr);
       process->state = PSTATE_ABORTED;
       return;
@@ -236,24 +245,15 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
     }
 
     if (process->is_async) {
-      struct sigaction handle_async = {0};
-      handle_async.sa_handler = SIG_IGN;
+      struct sigaction handle_async_ign = {0};
+      struct sigaction handle_async_dfl = {0};
+      handle_async_ign.sa_handler = SIG_IGN;
+      handle_async_dfl.sa_handler = SIG_DFL;
 
-      if (sigaction(SIGINT, &handle_async, NULL) < 0 ||
-          sigaction(SIGQUIT, &handle_async, NULL) < 0) {
+      if (sigaction(SIGINT, &handle_async_ign, NULL) < 0 ||
+          sigaction(SIGQUIT, &handle_async_ign, NULL) < 0 ||
+          sigaction(SIGCHLD, &handle_async_dfl, NULL)) {
         fputs("Runtime Error: Failed to set up signal for async process\n",
-              stderr);
-        process->state = PSTATE_ABORTED;
-        return;
-      }
-
-      struct sigaction handle_status = {0};
-      // TODO: Add context via sa_action
-
-      if (sigaction(SIGTERM, &handle_status, NULL) < 0 ||
-          sigaction(SIGCHLD, &handle_status, NULL) < 0) {
-        fputs("Runtime Error: Failed to set up signal for getting async "
-              "process status\n",
               stderr);
         process->state = PSTATE_ABORTED;
         return;
@@ -270,17 +270,31 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
   process->state = PSTATE_RUNNING;
 }
 
-void wait_on_process(Process *process) {
-  if (process->is_async)
+void wait_on_process(Process *process, bool force) {
+  if (process->is_async && !force)
     return;
 
   int waited = -1;
   do {
-    waited = waitpid(process->pid, &process->exit_status,
+    waited = waitpid(process->pid, &process->exit_stat,
                      WEXITED | WCONTINUED | WSTOPPED | WNOHAND);
   } while (waited != process->pid);
 
-  // TODO: Use macros to set process state
+  set_process_state(process);
+}
+
+void set_process_state(Process *process) {
+  if (WIFEXITED(process->exit_stat)) {
+    process->state = PSTATE_EXITED;
+    process > exit_stat = WEXITSTAT(process->exit_stat);
+  } else if (WIFSIGTERM(process->exit_stat)) {
+    process->state = PSTATE_TERMINATED;
+    process->term_stat = WTERMSIG(process->exit_stat);
+  } else if (WIFSTOPPED(process->exit_stat)) {
+    process->state = PSTATE_STOPPED;
+    process->stop_stat = WSTOPSIG(process->exit_stat);
+  } else
+    process->state = PSTATE_UNKNOWN;
 }
 
 void execute_job(Job *job, char **env_vars) {
@@ -288,10 +302,10 @@ void execute_job(Job *job, char **env_vars) {
   int last_out = -1;
 
   for (p = job->first_p; p != NULL; p = p->next) {
-    p->pgrpid = job->grpid;
+    p->pgroup_id = job->jgroup_id;
     execute_process(p, last_out, env_vars);
     wait_on_process(p);
-    job->grpid = p->pgrpid;
+    job->jgroup_id = p->pgroup_id;
     last_out = p->fno_out;
   }
 
