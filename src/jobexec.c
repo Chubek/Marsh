@@ -61,7 +61,6 @@ struct Process {
   size_t argc;
   bool is_async;
   int fno_in, fno_out, fno_err;
-  int channel[2];
   Process *next_p;
   Arena *scratch;
 };
@@ -121,9 +120,6 @@ Process *push_blank_process_to_job(Job *job, ioflags_t io_flags, char *io_word,
   p->fno_out = STDOUT_FILENO;
   p->fno_err = STDERR_FILENO;
 
-  p->channel[0] = STDIN_FILENO;
-  p->channel[1] = STDOUT_FILENO;
-
   return p;
 }
 
@@ -176,6 +172,7 @@ Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
 
 void execute_process(Process *process, int prev_read_end, char **env_vars) {
   pid_t id = process->pid = fork();
+  int channel[2];
 
   if (process->pgrpid == -1) {
     if ((process->pgrpid = getgpid(0)) == 0) {
@@ -197,7 +194,7 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
     return;
   }
 
-  if (pipe(process->channel) < 0) {
+  if (pipe(channel) < 0) {
     fputs(
         "Runtime Error: Failed to establish communication with child process\n",
         stderr);
@@ -206,7 +203,7 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
   }
 
   if (prev_read_end != -1) {
-    if (dup2(prev_read_end, process->channel[0]) < 0) {
+    if (dup2(prev_read_end, channel[0]) < 0) {
       fputs("Runtime Error: Failed to read the previous process input\n",
             stderr);
       process->state = PSTATE_ABORTED;
@@ -217,12 +214,16 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
       close(prev_read_end);
   }
 
+  close(channel[1]);
+  process->fno_in = dup(channel[0]);
+  close(channel[0]);
+
   if (!id) {
-    close(process->channel[0]);
+    close(channel[0]);
+    process->fno_out = dup(channel[1]);
+    close(channel[1]);
 
-    process->fno_in = dup(process->chan[1]);
-
-    if (process->fno_in < -1) {
+    if (process->fno_in < 0) {
       fputs("Runtime Error: Failed to establish process input file\n", stderr);
       process->state = PSTATE_ABORTED;
       return;
@@ -240,8 +241,6 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
     fprintf(stderr, "Runtime Error: Failed to launch %s\n", process->cmd_path);
     return;
   }
-
-  close(process->channel[1]);
 
   process->state = PSTATE_RUNNING;
 }
