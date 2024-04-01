@@ -61,7 +61,7 @@ struct Process {
   size_t argc;
   bool is_async;
   int fno_in, fno_out, fno_err;
-  int next_read, prev_write;
+  int channel[2];
   Process *next_p;
   Arena *scratch;
 };
@@ -121,8 +121,8 @@ Process *push_blank_process_to_job(Job *job, ioflags_t io_flags, char *io_word,
   p->fno_out = STDOUT_FILENO;
   p->fno_err = STDERR_FILENO;
 
-  p->next_read = -1;
-  p->prev_write = -1;
+  p->channel[0] = STDIN_FILENO;
+  p->channel[1] = STDOUT_FILENO;
 
   return p;
 }
@@ -174,8 +174,7 @@ Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
   return env;
 }
 
-void execute_process(Process *process, char **env_vars) {
-  int channel[2];
+void execute_process(Process *process, int prev_read_end, char **env_vars) {
   pid_t id = process->pid = fork();
 
   if (process->pgrpid == -1) {
@@ -198,29 +197,42 @@ void execute_process(Process *process, char **env_vars) {
     return;
   }
 
-  if (pipe(channel) < 0) {
-    fputs("Runtime Error: Failed to establish pipe\n", stderr);
+  if (pipe(process->channel) < 0) {
+    fputs(
+        "Runtime Error: Failed to establish communication with child process\n",
+        stderr);
     process->state = PSTATE_ABORTED;
     return;
   }
 
+  if (prev_read_end != -1) {
+    if (dup2(prev_read_end, process->channel[0]) < 0) {
+      fputs("Runtime Error: Failed to read the previous process input\n",
+            stderr);
+      process->state = PSTATE_ABORTED;
+      return;
+    }
+
+    if (prev_read_end != STDOUT_FILENO)
+      close(prev_read_end);
+  }
+
   if (!id) {
-    CLOSE_READ_END(channel);
+    close(process->channel[0]);
+
+    process->fno_in = dup(process->chan[1]);
+
+    if (process->fno_in < -1) {
+      fputs("Runtime Error: Failed to establish process input file\n", stderr);
+      process->state = PSTATE_ABORTED;
+      return;
+    }
 
     if (handle_process_redirect(process) == -1) {
       fputs("Runtime Error: Failed to redirect process\n", stderr);
       process->state = PSTATE_ABORTED;
       return;
     }
-
-    if (dup2(pipe[1], process->fno_out) < 0) {
-      fputs("Runtime Error: Failed to duplicate output channel\n", stderr);
-      process->state = PSTATE_ABORTED;
-      return;
-    }
-
-    p->next_read = dup(pipe[1]);
-    CLOSE_WRITE_END(channel);
 
     null_terminate_list(process->argv, process->argc);
     execlpe(process->cmd_path, process->argv, env_vars);
@@ -229,9 +241,7 @@ void execute_process(Process *process, char **env_vars) {
     return;
   }
 
-  CLOSE_WRITE_END(channel);
-  process->prev_write = dup(pipe[0]);
-  CLOSE_READ_END(channel);
+  close(process->channel[1]);
 
   process->state = PSTATE_RUNNING;
 }
