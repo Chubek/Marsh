@@ -235,6 +235,31 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
       return;
     }
 
+    if (process->is_async) {
+      struct sigaction handle_async = {0};
+      handle_async.sa_handler = SIG_IGN;
+
+      if (sigaction(SIGINT, &handle_async, NULL) < 0 ||
+          sigaction(SIGQUIT, &handle_async, NULL) < 0) {
+        fputs("Runtime Error: Failed to set up signal for async process\n",
+              stderr);
+        process->state = PSTATE_ABORTED;
+        return;
+      }
+
+      struct sigaction handle_status = {0};
+      // TODO: Add context via sa_action
+
+      if (sigaction(SIGTERM, &handle_status, NULL) < 0 ||
+          sigaction(SIGCHLD, &handle_status, NULL) < 0) {
+        fputs("Runtime Error: Failed to set up signal for getting async "
+              "process status\n",
+              stderr);
+        process->state = PSTATE_ABORTED;
+        return;
+      }
+    }
+
     null_terminate_list(process->argv, process->argc);
     execlpe(process->cmd_path, process->argv, env_vars);
 
@@ -243,4 +268,33 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
   }
 
   process->state = PSTATE_RUNNING;
+}
+
+void wait_on_process(Process *process) {
+  if (process->is_async)
+    return;
+
+  int waited = -1;
+  do {
+    waited = waitpid(process->pid, &process->exit_status,
+                     WEXITED | WCONTINUED | WSTOPPED | WNOHAND);
+  } while (waited != process->pid);
+
+  // TODO: Use macros to set process state
+}
+
+void execute_job(Job *job, char **env_vars) {
+  Process *p;
+  int last_out = -1;
+
+  for (p = job->first_p; p != NULL; p = p->next) {
+    p->pgrpid = job->grpid;
+    execute_process(p, last_out, env_vars);
+    wait_on_process(p);
+    job->grpid = p->pgrpid;
+    last_out = p->fno_out;
+  }
+
+  if (last_out != -1)
+    close(last_out);
 }
