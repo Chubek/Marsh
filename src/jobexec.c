@@ -303,12 +303,26 @@ void execute_job(Job *job, char **env_vars) {
 
   for (p = job->first_p; p != NULL; p = p->next) {
     p->pgroup_id = job->jgroup_id;
-    execute_process(p, last_out, env_vars);
-    wait_on_process(p);
+    3execute_process(p, last_out, env_vars);
+    wait_on_process(p, false);
+
+    if (last_out > 2)
+      close(last_out);
+
     job->jgroup_id = p->pgroup_id;
-    last_out = p->fno_out;
+    last_out = dup(p->fno_out);
+
+    if (last_out < 0) {
+      fputs("Runtime Error: Failed to duplicate output file in job chain\n",
+            stderr);
+      return;
+    }
+
+    close(p->fno_in);
+    close(p->fno_out);
+    close(p->fno_err);
   }
 
-  if (last_out != -1)
+  if (last_out > 2)
     close(last_out);
 }
