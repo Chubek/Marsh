@@ -14,9 +14,9 @@ typedef struct Job Job;
 typedef struct Environ Environ;
 
 Process *get_process_by_pid(Job *job, pid_t pid);
-Process *get_process_chain_by_pgroup_id(Job *job, pid_t pgroup_id);
+Process *get_process_chain_by_pgid(Job *job, pid_t pgid);
 Job *get_job_by_job_id(Environ *env, int job_id, bool bg);
-Job *get_job_chain_by_jgroup_id(Environ *env, pid_t jgroup_id, bool bg);
+Job *get_job_chain_by_jpgid(Environ *env, pid_t jpgid, bool bg);
 
 Process *push_blank_process_to_job(Job *job, ioflags_t io_flags, char *io_word,
                                    int io_num, char *cmd_path, char **argv,
