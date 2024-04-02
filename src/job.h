@@ -1,5 +1,5 @@
-#ifndef JOB_EXEC_H
-#define JOB_EXEC_H
+#ifndef JOB_H
+#define JOB_H
 
 #include <stdbool.h>
 #include <stdint.h>
@@ -39,4 +39,4 @@ void free_process(Process *process);
 void free_job(Job *job);
 void free_environ(Environ *env);
 
-#endif
+#endif /* job.h */
