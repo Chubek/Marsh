@@ -300,4 +300,41 @@ redirection		::= redirect-input
 
 
 
+## B.18: Shell Glob Pattern
 
+glob-literal-char	::= printable
+
+glob-match-many		::= '*'
+
+glob-match-one		::= '?'
+
+
+glob-bracket-pos	::= '[' { printable } ']'
+
+
+glob-bracket-neg	::= ( "[!" | "[^" ) { printable } ']'
+
+
+glob-bracketet		::= glob-brack-pos | glob-brack-neg
+
+glob-char		::= glob-literal-char
+			 | glob-match-many
+			 | glob-match-one
+
+glob-element		::= glob-char | glob-bracket
+
+
+glob			::= { glob-element }
+
+
+
+## B.19: Shell Word
+
+
+word			::= word-expansion
+			 | invoked-parameter
+			 | glob
+
+
+
+t 
