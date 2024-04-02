@@ -221,9 +221,79 @@ word-expansion		::= tilde-expansion
 
 
 
+## B.10: File Descriptor
+
+fdesc-in		::= '0'
+
+fdesc-out		::= '1'
+
+fdesc-err		::= '2'
+
+fdesc-unspec		::= '-'
+
+fdesc-high		::= '3' | ... | '9'
+
+
+fdesc			::= fdesc-in
+			 | fdesc-out
+			 | fdesc-err
+			 | fdesc-unspec
+			 | fdesc-high
 
 
 
+## B.11: Input Redirect
+
+
+redirect-input		::= [ fdesc ] '<' word
+
+
+## B.12: Output Redirect
+
+
+redirect-output		::= [ fdesc ] '>' word
+
+redirect-output-forced  ::= [ fdesc ] ">|" word
+
+
+## B.13: Append Redirected Output
+
+append-redirect-output  ::= [ fdesc ] ">>" word
+
+
+## B.14: Here Document
+
+io-here-delimiter	::= word
+
+
+io-here-start		::= [ fdesc ] ( "<<" | "<<-" ) word
+
+
+io-here			::= io-here-start { printable } io-here-delimiter
+
+
+## B.15: Duplicating File Descriptors
+
+duplicate-input-fdesc   ::= [ fdesc ] "<&" word
+
+duplicate-output-fdesc  ::= [ fdesc ] ">&" word
+
+
+## B.16: Open for Reading and Writing
+
+open-file-for-rw	::= [ fdesc ] "<>" word
+
+
+## B.17: IO Redirection
+
+redirection		::= redirect-input
+			 | redirect-output
+			 | redirect-output-forced
+			 | append-redirect-output
+			 | io-here
+			 | duplicate-input-fdesc
+			 | duplicate-output-fdesc
+			 | open-file-for-rw
 
 
 
