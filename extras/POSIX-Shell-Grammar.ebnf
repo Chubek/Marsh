@@ -8,8 +8,6 @@ newline			::= ? newline character on system ?
 
 tabulator		::= ? tab character on system ?
 
-null-join		::= ? matching nothing to join ?
-
 whitespace		::= ' ' | tabulator
 
 skip-newline		::= '\' newline
@@ -68,10 +66,7 @@ integer			::= { digit }
 
 single-quote		::= "'" { printable } "'"
 
-double-quote		::= '"' { parameter-expansion 
-				| command-substitution 
-				| escape-character
-				| printable } '"'
+double-quote		::= '"' { visible-expansion | escape-character | printable } '"'
 
 quoted-literal		::= single-quote | double-quote
 
@@ -79,10 +74,7 @@ quoted-literal		::= single-quote | double-quote
 ## B.2: Positional Parameters
 
 
-positional-number	::= { natural-digit }
-
-
-positional-parameter	::= '$' null-join positional-number
+positional-parameter	::= { natural-digit }
 
 
 ## B.3: Special Parameters
@@ -106,17 +98,131 @@ special-param-env-name  ::= '0'
 
 special-param-ifs	::= "IFS"
 
-special-params		::= '$' (
-				    special-param-all-pos-a
-				  | special-param-all-pos-b
-				  | special-param-pos-num
-				  | special-param-last-exit
-				  | special-param-asyncp-job
-				  | special-param-proc-id
-				  | special-param-flag-opts
-				  | special-param-env-name
-				  | special-param-ifs
-				)
+special-parameters	::=  (
+			    special-param-all-pos-a
+			 | special-param-all-pos-b
+			 | special-param-pos-num
+			 | special-param-last-exit
+			 | special-param-asyncp-job
+			 | special-param-proc-id
+			 | special-param-flag-opts
+			 | special-param-env-name
+			 | special-param-ifs
+			     )
+
+
+## B.4: Variable
+
+variable-parameter	::= identifier
+
+
+
+## B.5: Parameters
+
+
+parameter		::= variable-parameter | special-parameter | positional-parameter
+
+
+invoked-parameter	::= '$' parameter
+
+
+
+
+## B.5: Tilde Expansion
+
+
+tilde-expansion		::= '~'
+
+
+## B.6: Pathname Expansion
+
+pathname-expansion	::= ? expand globs ?
+
+
+
+## B.7: Field Splitting
+
+field-splitting		::= ? split fields based on IFS ?
+
+
+
+## B.8: Parameter Expansion
+
+
+param-expand-simple    ::= "${" parameter '}'
+
+
+param-expand-default   ::= "${" parameter [ ':' ] '-' [ word ] '}'
+
+
+param-expand-assign    ::= "${" parameter [ ':' ] '=' [ word ] '}'
+
+
+param-expand-error     ::= "${" parameter [ ':' ] '?' [ word ] '}'
+
+
+param-expand-alt       ::= "${" parameter [ ':' ] '+' [ word ] '}'
+
+
+param-expand-strlen    ::= "${" '#' parameter '}'
+
+
+param-expand-rm-prefix ::= "${" parameter [ '%' ] '%' [ word ] '}'
+
+
+param-expand-rm-suffix ::= "${" parameter [ '#' ] '#' [ word ] '}'
+
+
+parameter-expansion    ::= param-expand-simple
+			| param-expand-default
+			| param-expand-assign
+			| param-expand-error
+			| param-expand-alt
+			| param-expand-strlen
+			| param-expand-rm-prefix
+			| param-expand-rm-suffix
+
+
+## B.9: Command Substitution
+
+enclosed-substitute	::= "$(" command ')'
+
+backtick-substitue	::= '`' command '`'
+
+command-substitution	::= enclosed-substitute | backtick-substitute
+
+
+## B.10: Arithmetic Expansion
+
+arithmetic-expression	::= ? a valid arithmetic expression ?
+
+
+arithmetic-expansion    ::= "$((" arithmetic-expression ')'
+
+
+## B.9: Expansion
+
+quote-removal		::= ? remove escaped quotes ?
+
+
+visible-expansion	::= tilde-expansion
+			 | command-substitution
+			 | arithmetic-expansion
+			 | parameter-expansion
+
+
+word-expansion		::= tilde-expansion
+			 | pathname-expansion
+			 | field-splitting
+			 | parameter-expansion
+			 | command-substitution
+			 | arithmetic-expansion
+			 | quote-removal
+
+
+
+
+
 
 
 
