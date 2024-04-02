@@ -1,227 +1,127 @@
-program                 ::= [ shebang ] { posix-shell-command | ignorable }
+# A: Lexical Grammar for POSIX Shell
 
-shebang                 ::= "#!" simple-command sys-newline
 
-posix-shell-command     ::= function-definition
-                          | compound-command
 
-function-definition     ::= identifier "()" compound-command [ shell-redirect ]
+## A.0: Ignorable
 
-compound-command        ::= shell-groupers
-                          | shell-list
-                          | shell-command
-                          | shell-word
+newline			::= ? newline character on system ?
 
-shell-groupers          ::= until-loop
-                          | while-loop
-                          | if-conditional
-                          | case-conditional
-                          | for-loop
+tabulator		::= ? tab character on system ?
 
-until-loop              ::= "until" shell-list "do" shell-list "done"
+null-join		::= ? matching nothing to join ?
 
-while-loop              ::= "while" shell-list "do" shell-list "done"
+whitespace		::= ' ' | tabulator
 
-if-conditional          ::= "if" shell-list "then" shell-list { "elif" shell-list "then" shell-list } [ "else" shell-list ] "fi"
+skip-newline		::= '\' newline
 
-case-conditional        ::= "case" shell-word "in" { [ '(' ] glob-pattern-list ')' shell-list [ ";;" ] } "esac"
+no-newline		::= ? anything but newline ?
 
-glob-pattern-list       ::= glob-pattern { '|' glob-pattern }
+comment			::= '#' { no-newline } newline
 
-glob-pattern            ::= [ '*' | '?' | '[' [ '^' ] { character-range | character } ']' | '{' { shell-word [ ',' ] } '}' ]
+ignorable		::= whitespace | comment | skip-newline
 
-for-loop                ::= "for" identifier [ "in" { shell-word } ] "do" shell-list "done"
 
-shell-list              ::= shell-word
-                          | compound-list
-                          | subshell-list
-                          | complex-list
-                          | basic-list
 
-shell-word              ::= shell-literal
-                          | shell-parameter
-                          | shell-expansion
-                          | shell-command
+## A.1: Basics
 
-compound-list           ::= '{' ( complex-list | subshell-list ) ';' '}'
+natural-digit		::= '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 
-subshell-list           ::= '(' complex-list ')'
+digit			::= '0' | '1' | '2' | '3' | '4' | '5' | '6' | '7' | '8' | '9'
 
-complex-list            ::= basic-list
-                          | asynchronous-exec-list
-                          | sequential-exec-list
+upper-case 		::= 'A' | 'B' | 'C' | 'D' | 'E' | 'F' | 'G' | 'H' | 'I' | 'J'
+	 	          | 'K' | 'L' | 'M' | 'N' | 'O' | 'P' | 'Q' | 'R' | 'S' | 'T'
+	 	          | 'U' | 'V' | 'W' | 'X' | 'Y' | 'Z'
 
-asynchronous-exec-list  ::= basic-list { '&' basic-list }
+lower-case 		::= 'a' | 'b' | 'c' | 'd' | 'e' | 'f' | 'g' | 'h' | 'i' | 'j'
+	        	  | 'k' | 'l' | 'm' | 'n' | 'o' | 'p' | 'q' | 'r' | 's' | 't'
+		          | 'u' | 'v' | 'w' | 'x' | 'y' | 'z'
 
-sequential-exec-list    ::= basic-list { ';' basic-list }
+punctuation 		::= '.' | ',' | ';' | ':' | '!' | '?' | '-' | '_' | '(' | ')' 
+	 	          | '{' | '}' | '[' | ']' | '"' | "'" | '`' | '@' | '#' 
+		          | '$' | '%' | '^' | '&' | '*' | '+' | '=' | '<' | '>' 
+		          | '/' | '|' | '~' | '\'
 
-basic-list              ::= logical-and-list
-                          | logical-or-list
 
-logical-or-list         ::= shell-command { "||" shell-command }
 
-logical-and-list        ::= shell-command { "&&" shell-command }
+alphabetic		::= upper-case | lower-case
 
-shell-command           ::= simple-shell-command
-                          | command-pipeline
+alphanumeric		::= alphabetic | digit
 
-command-pipeline        ::= [ '!' ] simple-shell-command { '|' simple-shell-command }
+printable		::= punctuation | alphanumeric
 
-simple-shell-command    ::= { basic-command-word } [ basic-command-args ] [ shell-redirect ]
+escape-character	::= '\' ( '$' | '`' | '"' | '\' | newline )
 
-basic-command-args      ::= { shell-word }
+## A.2: Integer & Identifier
 
-basic-command-word      ::= built-in-command
-                          | external-command
-                          | assignment-command
+identifier-prefix	::= alphabetic | '_'
 
-external-command        ::= shell-word
+identifier-suffix	::= alphanumeric | '_'
 
-built-in-command        ::= ':' | '.' | "break"
-                          | "cd" | "continue" | "eval"
-                          | "exec" | "exit" | "export"
-                          | "readonly" | "return" | "unset"
-                          | "set" | "shift" | "trap"
+identifier		::= identifier-prefix { identifier-suffix }
 
-assignment-command      ::= identifier '=' shell-word
+integer			::= { digit }
 
-shell-redirect          ::= redirect-input
-                          | redirect-output
-                          | append-output
-                          | here-document
-                          | duplicate-input
-                          | duplicate-output
-                          | open-for-read-write
 
-open-for-read-write     ::= [ file-descriptor ] "<>" shell-word
+# B: Syntactc Grammar for POSIX Shell
 
-duplicate-output        ::= [ file-descriptor ] ">&" duplication-word
+## B.1: Quoting
 
-duplicate-input         ::= [ file-descriptor ] "<&" duplication-word
+single-quote		::= "'" { printable } "'"
 
-duplication-word        ::= shell-word  
+double-quote		::= '"' { parameter-expansion 
+				| command-substitution 
+				| escape-character
+				| printable } '"'
 
-here-document           ::= here-document-init here-document-text here-document-delim
+quoted-literal		::= single-quote | double-quote
 
-here-document-text      ::= ? any text ?
 
-here-document-init      ::= [ file-descriptor ] here-document-operator here-document-delim
+## B.2: Positional Parameters
 
-here-document-delim     ::= shell-word  
 
-here-document-operator  ::= here-document-expand | here-document-noexpand
+positional-number	::= { natural-digit }
 
-here-document-expand    ::= "<<-"
 
-here-document-noexpand  ::= "<<"
+positional-parameter	::= '$' null-join positional-number
 
-append-output           ::= [ file-descriptor ] ">>" shell-word
 
-redirect-output         ::= redirect-clobber | redirect-noclobber
+## B.3: Special Parameters
 
-redirect-clobber        ::= [ file-descriptor ] ">|" shell-word
 
-redirect-noclobber      ::= [ file-descriptor ] '>' shell-word
+special-param-all-pos-a ::= '@'
 
-redirect-input          ::= [ file-descriptor ] '<' shell-word
+special-param-all-pos-b ::= '*'
 
-file-descriptor         ::= stdin-fdesc
-                          | stdout-fdesc
-                          | stderr-fdesc
-                          | general-fdesc
+special-param-pos-num   ::= '#'
 
-general-fdesc           ::= [ '3' | ... | '9' ] { digit }  
+special-param-last-exit ::= '?'
 
-stderr-fdesc            ::= '2'
+special-param-async-job ::= '!'
 
-stdout-fdesc            ::= '1'
+special-param-proc-id 	::= '$'
 
-stdin-fdesc             ::= '0'
+special-param-flag-opts ::= '-'
 
-shell-expansion         ::= tilde-expansion
-                          | simple-param-expansion
-                          | complex-param-expansion
-                          | command-substitution
-                          | arithmetic-expansion
+special-param-env-name  ::= '0'
 
-arithmetic-expansion    ::= "$((" arith-word "))"
+special-param-ifs	::= "IFS"
 
-command-substitution    ::= "$( " command-word " )"
+special-params		::= '$' (
+				    special-param-all-pos-a
+				  | special-param-all-pos-b
+				  | special-param-pos-num
+				  | special-param-last-exit
+				  | special-param-asyncp-job
+				  | special-param-proc-id
+				  | special-param-flag-opts
+				  | special-param-env-name
+				  | special-param-ifs
+				)
 
-arith-word              ::= shell-word  
 
-command-word            ::= shell-word  
 
-complex-param-expansion ::= "${" shell-parameter [ param-expansion-modifier ] [ shell-word ] "}"
 
-param-expansion-modifier ::= getter-string-length
-                           | modifier-set-and-expand
-                           | modifier-set-only
-                           | remover-suffix
-                           | remover-prefix
 
-remover-suffix          ::= '#' | "##"
 
-remover-prefix          ::= '%' | "%%"
 
-getter-string-length    ::= '#' shell-parameter
-
-modifier-set-and-expand ::= ':' modifier-set-only
-
-modifier-set-only       ::= '-' | '=' | '?' | '+'
-
-simple-param-expansion  ::= '$' shell-parameter
-
-tilde-expansion         ::= '~' [ shell-word ]
-
-shell-parameter         ::= variable-parameters
-                          | special-parameters
-                          | positional-parameters
-
-variable-parameters     ::= identifier
-
-special-parameters      ::= '#' | '*' | '@' | '?' | '!' | '-' | '$'
-
-positional-parameters   ::= { digit }
-
-shell-literal           ::= escaped | quoted-literal
-
-quoted-literal          ::= back-quoted-literal
-                          | double-quoted-literal
-                          | single-quoted-literal
-
-back-quoted-literal     ::= '`' { printable | shell-word } '`'
-
-double-quoted-literal   ::= '"' { printable | shell-word } '"'
-
-single-quoted-literal   ::= "'" { printable } "'"
-
-escaped                 ::= '\' ( '"' | '`' | '\' | '$' | sys-newline )
-
-ignorable               ::= whitespace
-                          | sys-newline
-                          | comment
-
-whitespace              ::= ' ' | '\t'  
-                          | continuous-linebreak
-
-comment                 ::= "#" { no-newline } sys-newline
-
-no-newline              ::= ? any character except sys-newline ?
-
-continuous-linebreak    ::= '\' sys-newline
-
-sys-newline             ::= ? the native system newline character ?
-
-identifier              ::= alphabetic { alphanumeric | '_' }
-
-alphanumeric            ::= letter | digit
-
-alphabetic              ::= upper-case | lower-case
-
-upper-case              ::= 'A'..'Z'
-
-lower-case              ::= 'a'..'z'
-
-digit                   ::= '0'..'9'
 
