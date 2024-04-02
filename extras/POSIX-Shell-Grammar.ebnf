@@ -1,3 +1,10 @@
+# Lexical and Syntactic EBNF Grammar for POSIX Shell (Non-Attributed)
+# Authored by Chubak Bidpaa (chubakbidpaa@riseup.net)
+# Written For the Marsh Shell (https://github.com/Chubek/Marsh)
+# This grammar is based on POSIX specs (https://pubs.opengroup.org/onlinepubs/9699919799/utilities/V3_chap02.html)
+# This document is released under `Unlicense` Public Domain License Agreement | (C) 2024 Chubak Bidpaa | No Warranty
+
+
 # A: Lexical Grammar for POSIX Shell
 
 
@@ -45,9 +52,12 @@ alphabetic		::= upper-case | lower-case
 
 alphanumeric		::= alphabetic | digit
 
-printable		::= punctuation | alphanumeric
+printable		::= punctuation | alphanumeric | whitespace
 
 escape-character	::= '\' ( '$' | '`' | '"' | '\' | newline )
+
+
+
 
 ## A.2: Integer & Identifier
 
@@ -261,6 +271,8 @@ redirect-output-forced  ::= [ fdesc ] ">|" word
 append-redirect-output  ::= [ fdesc ] ">>" word
 
 
+
+
 ## B.15: Here Document
 
 io-here-delimiter	::= word
@@ -269,7 +281,9 @@ io-here-delimiter	::= word
 io-here-start		::= [ fdesc ] ( "<<" | "<<-" ) word
 
 
-io-here			::= io-here-start { printable } io-here-delimiter
+io-here			::= io-here-start { printable | newline } io-here-delimiter
+
+
 
 
 ## B.16: Duplicating File Descriptors
@@ -277,6 +291,8 @@ io-here			::= io-here-start { printable } io-here-delimiter
 duplicate-input-fdesc   ::= [ fdesc ] "<&" word
 
 duplicate-output-fdesc  ::= [ fdesc ] ">&" word
+
+
 
 
 ## B.17: Open for Reading and Writing
@@ -334,6 +350,8 @@ glob-word		::= { glob-element }
 word			::= word-expansion
 			 | invoked-parameter
 			 | glob-word
+			 | identifier
+			 | quoted-literal
 
 
 
@@ -364,12 +382,93 @@ and-list		::= compound-list { "&&" compound-list }
 or-list			::= compound-list { "||" compound-list }
 
 
+newline-list		::= compound-list { newline compound-list }
+
 
 compound-list		::= pipeline 
 			 | async-list
 			 | sequential-list
 			 | and-list
 			 | or-list
+			 | newline-list
+			 | compound-command
+
+
+
+
+## B.24: Grouped Compound Commands
+
+
+subshell-compound-cmd	::= '(' compound-list ')'
+
+sameshell-compound-cmd	::= '{' compound-list ';' '}'
+
+
+grouped-compound-cmd	::= subshell-compound-cmd | sameshell-compound-cmd
+
+
+
+
+## B.25: Looped Compound Commands
+
+for-compound-cmd	::= "for" identifier [ "in" { word } ] [ ';' ] "do" compound-list [ ';' ] "done"
+
+while-compound-cmd	::= "while" compound-list [ ';' ] "do" compound-list [ ';' ] "done"
+
+until-compound-cmd	::= "while" compound-list [ ';' ] "do" compound-list [ ';' ] "done"
+
+
+
+looped-compound-cmd	::= for-compound-cmd | while-compound-cmd | until-compound-cmd
+
+
+## B.26: Conditional Compound Commands
+
+glob-alt-list		::= glob-word { '|' glob-word }
+
+case-condition		::= glob-alt-list ')' compound-list ";;"
+
+case-compound-cmd	::= "case" word [ ';' ] "in" { case-condition } [ ';' ] "esac"
+
+elif-alt		::=  "elif" compound-list [ ';' ] "then" compound-list
+
+else-alt		::= "else" compound-list
+
+if-compound-cmd		::= "if" compound-list [ ';' ] "then" compound-list [ ';' ] { elif-alt } [ ';' ] else-alt [ ';' ] "fi"
+
+
+condition-compound-cmd	::= case-compound-cmd | if-compound-cmd
+
+
+## B.27: Function Definition Compound Command
+
+
+funcdef-compound-cmd	::= identifier "()" compound-command [ redirection ]
+
+
+
+
+## B.28: Compound Command and Command
+
+
+compound-command	::= grouped-compound-cmd
+			 | looped-compound-cmd
+			 | condition-compound-cmd
+			 | funcdef-compound-cmd
+
+
+
+
+command			::= simple-command | pipeline | compound-command
+
+
+
+## B.29: Shell
+
+posix-shell		::= { command | ignorable }
+
+
+
 
 
 
