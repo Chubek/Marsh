@@ -200,7 +200,7 @@ arithmetic-expression	::= ? a valid arithmetic expression ?
 arithmetic-expansion    ::= "$((" arithmetic-expression ')'
 
 
-## B.9: Expansion
+## B.11: Expansion
 
 quote-removal		::= ? remove escaped quotes ?
 
@@ -221,7 +221,7 @@ word-expansion		::= tilde-expansion
 
 
 
-## B.10: File Descriptor
+## B.12: File Descriptor
 
 fdesc-in		::= '0'
 
@@ -242,13 +242,13 @@ fdesc			::= fdesc-in
 
 
 
-## B.11: Input Redirect
+## B.13: Input Redirect
 
 
 redirect-input		::= [ fdesc ] '<' word
 
 
-## B.12: Output Redirect
+## B.13: Output Redirect
 
 
 redirect-output		::= [ fdesc ] '>' word
@@ -256,12 +256,12 @@ redirect-output		::= [ fdesc ] '>' word
 redirect-output-forced  ::= [ fdesc ] ">|" word
 
 
-## B.13: Append Redirected Output
+## B.14: Append Redirected Output
 
 append-redirect-output  ::= [ fdesc ] ">>" word
 
 
-## B.14: Here Document
+## B.15: Here Document
 
 io-here-delimiter	::= word
 
@@ -272,19 +272,19 @@ io-here-start		::= [ fdesc ] ( "<<" | "<<-" ) word
 io-here			::= io-here-start { printable } io-here-delimiter
 
 
-## B.15: Duplicating File Descriptors
+## B.16: Duplicating File Descriptors
 
 duplicate-input-fdesc   ::= [ fdesc ] "<&" word
 
 duplicate-output-fdesc  ::= [ fdesc ] ">&" word
 
 
-## B.16: Open for Reading and Writing
+## B.17: Open for Reading and Writing
 
 open-file-for-rw	::= [ fdesc ] "<>" word
 
 
-## B.17: IO Redirection
+## B.18: IO Redirection
 
 redirection		::= redirect-input
 			 | redirect-output
@@ -300,7 +300,7 @@ redirection		::= redirect-input
 
 
 
-## B.18: Shell Glob Pattern
+## B.19: Shell Glob Pattern
 
 glob-literal-char	::= printable
 
@@ -324,17 +324,52 @@ glob-char		::= glob-literal-char
 glob-element		::= glob-char | glob-bracket
 
 
-glob			::= { glob-element }
+glob-word		::= { glob-element }
 
 
 
-## B.19: Shell Word
+## B.20: Shell Word
 
 
 word			::= word-expansion
 			 | invoked-parameter
-			 | glob
+			 | glob-word
 
 
 
-t 
+## B.21: Simple Commands
+
+
+simple-command		::= word { word } [ redirection ]
+
+
+
+## B.22: Pipelines
+
+
+pipeline		::= [ '!' ] simple-command { '|' simple-command }
+
+
+## B.23: Lists
+
+asnyc-list		::= compound-list { '&' compound-list }
+
+
+sequential-list		::= compound-list { ';' compound-list }
+
+
+and-list		::= compound-list { "&&" compound-list }
+
+
+or-list			::= compound-list { "||" compound-list }
+
+
+
+compound-list		::= pipeline 
+			 | async-list
+			 | sequential-list
+			 | and-list
+			 | or-list
+
+
+
