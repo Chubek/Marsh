@@ -54,7 +54,7 @@ typedef enum IOFlags {
 
 struct Process {
   pid_t pid;
-  pid_t pgroup_id;
+  pid_t pgid;
   pstate_t state;
   ioflags_t ioflags;
   char *io_word;
@@ -73,7 +73,7 @@ struct Process {
 
 struct Job {
   int job_id;
-  pid_t jgroup_id;
+  pid_t jpgid;
   jstate_t state;
   bool user_notified;
   struct termios tmodes;
@@ -93,6 +93,54 @@ struct Environ {
   Job *first_j_bg;
   Arena *scratch;
 };
+
+Process *get_process_by_pid(Job *job, pid_t pid) {
+  Process *p;
+  for (p = job->first_p; p != NULL; p = p->next)
+    if (p->pid == pid)
+      return p;
+
+  return NULL;
+}
+
+Process *get_process_chain_by_pgid(Job *job, pid_t pgid) {
+  Process *p, *dup, *chain = NULL;
+  for (p = job->first_p; p != NULL; p = p->next) {
+    if (p->pgid == pgid) {
+      dup = (Process *)arena_alloc(job->scratch, sizeof(Process));
+      memmove(dup, p, sizeof(Process));
+
+      dup->next = chain;
+      chain = dup;
+    }
+  }
+
+  return chain;
+}
+
+Job *get_job_by_job_id(Environ *env, int job_id, bool bg) {
+  Job *j;
+  for (j = bg ? env->first_bg_j : env->first_fg_j; j != NULL; j = j->next)
+    if (j->id == id)
+      return j;
+
+  return NULL;
+}
+
+Job *get_job_chain_by_jpgid(Environ *env, pid_t jpgid, bool bg) {
+  Job *j, *dup, *chain = NULL;
+  for (j = bg ? env->first_bg_j : env->first_fg_j; j != NULL; j = j->next) {
+    if (j->jpgid == jpgid) {
+      dup = (Job *)arena_alloc(env->scratch, sizeof(Job));
+      memmove(dup, j, sizeof(Job));
+
+      dup->next = chain;
+      chain = dup;
+    }
+  }
+
+  return chain;
+}
 
 Process *push_blank_process_to_job(Job *job, ioflags_t io_flags, char *io_word,
                                    int io_num, char *cmd_path, char **argv,
@@ -119,7 +167,7 @@ Process *push_blank_process_to_job(Job *job, ioflags_t io_flags, char *io_word,
 
   p->state = PSTATE_PENDING;
   p->pid = -1;
-  p->pgroup_id = job->jgroup_id;
+  p->pgid = job->jpgid;
 
   p->exit_stat = -1;
   p->stop_stat = -1;
@@ -146,7 +194,7 @@ Job *push_blank_job_to_environ(Environ *env, int job_id) {
   }
 
   j->job_id = job_id;
-  j->jgroup_id = -1;
+  j->jpgid = -1;
 
   j->state = JSTATE_PENDING;
   j->user_notified = false;
@@ -183,14 +231,14 @@ void execute_process(Process *process, int prev_read_end, char **env_vars) {
   pid_t id = process->pid = fork();
   int channel[2];
 
-  if (process->pgroup_id == -1) {
-    if ((process->pgroup_id = getgpid(0)) < 0) {
+  if (process->pgid == -1) {
+    if ((process->pgid = getgpid(0)) < 0) {
       fputs("Runtime Error: Failed to obtain process' group id\n", stderr);
       process->state = PSTATE_ABORTED;
       return;
     }
   } else {
-    if (setgpid(id, process->pgroup_id) < 0) {
+    if (setgpid(id, process->pgid) < 0) {
       fputs("Runtime Error: Failed to set process' group id\n", stderr);
       process->state = PSTATE_ABORTED;
       return;
@@ -302,14 +350,14 @@ void execute_job(Job *job, char **env_vars) {
   int last_out = -1;
 
   for (p = job->first_p; p != NULL; p = p->next) {
-    p->pgroup_id = job->jgroup_id;
+    p->pgid = job->jpgid;
     3execute_process(p, last_out, env_vars);
     wait_on_process(p, false);
 
     if (last_out > 2)
       close(last_out);
 
-    job->jgroup_id = p->pgroup_id;
+    job->jpgid = p->pgid;
     last_out = dup(p->fno_out);
 
     if (last_out < 0) {
