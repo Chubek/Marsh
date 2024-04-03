@@ -1,0 +1,60 @@
+%{
+
+#include <stdint.h>
+#include <sys/types.h>
+
+extern uint8_t *tree_alloc(size_t);
+
+#define ALLOC(size)	tree_alloc(size)
+
+%}
+
+
+quoted_literal		::= SingleQuoted(string escaped_text)
+			 | DoubleQuoted(word_stack words)
+			 ;
+
+
+parameter		::= PositionalParam(int pos)
+			 | SpecialParam(special_param special)
+			 | VariableParam(identifier name)
+			 ;
+
+glob_wc			::= MatchOne | MatchMany ;
+
+glob_stack		::= (glob* values) ;
+
+glob			::= Wildcard(glob_wc wildcard)
+			 | Literal(uchar lit_char)
+			 | Bracket(bool neg, string contents)
+			 | GlobStack(glob_stack stack)
+			 ;
+
+
+expand_path		::= Tilde(string suffix)
+			 | Glob(glob pattern)
+			 ;
+
+
+expand_param_sub       ::= Default(parameter param, word? word_opt, bool colon)
+			 | Assign(parameter param, word? word_opt, bool colon)
+			 | Error(parameter param, word? word_opt, bool colon)
+			 | Alt(parameter param, word? word_opt, bool colon)
+			 ;
+
+
+expand_param_remove	::= RemoveSuffix(parameter param, word? word_opt, bool large)
+			 | RemovePrefix(parameter param, word? word_opt, bool large)
+			 ;
+
+expand_param		::= Simple(parameter to_expn)
+			 | Sub(expand_param_sub sub_param)
+			 | Remove(expand_param_remove rm_param)
+			 | Strlen(parameter len_param)
+			 ;
+
+
+
+
+
+
