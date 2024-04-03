@@ -3,7 +3,7 @@
 #include <stdint.h>
 #include <sys/types.h>
 
-extern uint8_t *tree_alloc(size_t);
+extern void *tree_alloc(size_t);
 
 #define ALLOC(size)	tree_alloc(size)
 
@@ -32,13 +32,14 @@ parameter		::= PositionalParam(int pos)
 
 glob_wc			::= MatchOne | MatchMany ;
 
-glob_stack		::= (glob* values) ;
 
 glob			::= Wildcard(glob_wc wildcard)
-			 | Literal(uchar lit_char)
+			 | LiteralChar(uchar lit_char)
 			 | Bracket(bool neg, string contents)
 			 | GlobStack(glob_stack stack)
 			 ;
+
+glob_stack		::= (glob* stack) ;
 
 
 expand_path		::= Tilde(string suffix)
@@ -46,23 +47,35 @@ expand_path		::= Tilde(string suffix)
 			 ;
 
 
-expand_param_sub       ::= Default(parameter param, word? word_opt, bool colon)
+expand_param_sub       ::= Defl(parameter param, word? word_opt, bool colon)
 			 | Assign(parameter param, word? word_opt, bool colon)
 			 | Error(parameter param, word? word_opt, bool colon)
 			 | Alt(parameter param, word? word_opt, bool colon)
 			 ;
 
 
-expand_param_remove	::= RemoveSuffix(parameter param, word? word_opt, bool large)
+expand_param_rm		::= RemoveSuffix(parameter param, word? word_opt, bool large)
 			 | RemovePrefix(parameter param, word? word_opt, bool large)
 			 ;
 
 expand_param		::= Simple(parameter to_expn)
-			 | Sub(expand_param_sub sub_param)
-			 | Remove(expand_param_remove rm_param)
+			 | Substitute(expand_param_sub sub_param)
+			 | Remove(expand_param_rm rm_param)
 			 | Strlen(parameter len_param)
 			 ;
 
+
+arith			::= Num(int64 n)
+			 | Variable(identifier var)
+			 | Nested(arith* list_nested)
+			 | Add(arith l, arith r)
+			 | Sub(arith l, arith r)
+			 | Mul(arith l, arith r)
+			 | Div(arith l, arith r)
+			 | Mod(arith l, arith r)
+			 | Shr(arith l, arith r)
+			 | Shl(arith l, arith r)
+			 ;
 
 
 expansion		::= Path(expand_path path_expn)
@@ -113,9 +126,9 @@ grouped_compound_cmd	::= SubShell(compound_list body)
 			 | SameShel(compound_list body)
 			 ;
 
-looped_compound_cmd	::= For(identifier name, word_stack words, compound_list body)
-			 | While(compound_list ls1, compound_list ls2)
-			 | Until(compound_list ls1, compound_list ls2)
+looped_compound_cmd	::= ForLoop(identifier name, word_stack words, compound_list body)
+			 | WhileLoop(compound_list ls1, compound_list ls2)
+			 | UntilLoop(compound_list ls1, compound_list ls2)
 			 ;
 
 
@@ -124,8 +137,8 @@ case_condition		::= (glob* patterns, compound_list body) ;
 if_condition		::= (compound_list cond, compound_list body) ;
 
 
-condition_compound_cmd  ::= Case(word_stack words, case_condition* body)
-			 | If(if_condition if_base, if_condition* elifs, compound_list? else)
+condition_compound_cmd  ::= CaseCond(word_stack words, case_condition* body)
+			 | IfCond(if_condition if_base, if_condition* elifs, compound_list? else_base)
 			 ;
 
 funcdef_compound_cmd	::= (identifier name, compound_command body, redirection? redir) ;
@@ -138,24 +151,16 @@ compound_command	::= Grouped(grouped_compound_cmd grouped)
 			 ;
 
 
-shell			::= Word(word_stack words)
+command			::= Word(word_stack words)
 			 | List(compound_list list)
 			 | SimpleCmd(simple_command simple_cmd)
 			 | CompoundCommand(compound_command compound_cmd)
 			 ;
 
 
-
-shell_body		::= (shell* elements, string shebang) ;
-
+command_stack		::= (command* stack) ;
 
 
-
-
-
-
-
-
-
+shell_body		::= (command_stack elements, string shebang) ;
 
 
