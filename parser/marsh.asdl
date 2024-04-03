@@ -10,8 +10,18 @@ extern uint8_t *tree_alloc(size_t);
 %}
 
 
-quoted_literal		::= SingleQuoted(string escaped_text)
+quoted			::= SingleQuoted(string escaped_text)
 			 | DoubleQuoted(word_stack words)
+			 ;
+
+special_param		::= AllPositionalA
+			 | AllPosiitionalB
+			 | NoOfPos
+			 | LastExit
+			 | AsyncExit
+			 | ProcId
+			 | FlagOpts
+			 | EnvName
 			 ;
 
 
@@ -52,6 +62,97 @@ expand_param		::= Simple(parameter to_expn)
 			 | Remove(expand_param_remove rm_param)
 			 | Strlen(parameter len_param)
 			 ;
+
+
+
+expansion		::= Path(expand_path path_expn)
+			 | Param(expand_param param_expn)
+			 | Command(command cmd_expn)
+			 | Arith(arith arith_expn)
+			 ;
+
+
+word			::= Literal(string word_literal)
+			 | Expansion(expansion word_expn)
+			 | Quoted(quoted word_quoted)
+			 ;
+
+
+word_stack		::= (word* stack) ;
+
+
+redirection		::= RedirIn(int? fno, word redir_word)
+			 | RedirOut(int? fno, word redir_word)
+			 | AppendOut(int? fno, word redir_word)
+			 | HereDoc(int? fno, word document, word delim, bool untab)
+			 | DupInFd(int? fno, word redir_word)
+			 | DupOutFd(int? fno, word redir_word)
+			 | OpenRw(int? fno, word redir_word)
+			 ;
+
+
+simple_command		::= NonTermCmd(word_stack words, redirection? redir) 
+			 | SeqTermCmd(word_stack words, redirection? redir)
+			 | AsynTermCmd(word_stack words, redirection? redir)
+			 ;
+
+
+pipeline		::= NonTermPipe(simple_command* commands)
+			 | SeqTermPipe(simple_command* commands)
+			 | AsyncTermPipe(simple_command* commands)
+
+
+compound_list		::= PipelineBase(pipeline pipeln)
+			 | And(compound_list* list)
+			 | Or(compound_list* list)
+			 | Newline(compound_list* list)
+			 ;
+
+
+grouped_compound_cmd	::= SubShell(compound_list body)
+			 | SameShel(compound_list body)
+			 ;
+
+looped_compound_cmd	::= For(identifier name, word_stack words, compound_list body)
+			 | While(compound_list ls1, compound_list ls2)
+			 | Until(compound_list ls1, compound_list ls2)
+			 ;
+
+
+case_condition		::= (glob* patterns, compound_list body) ;
+
+if_condition		::= (compound_list cond, compound_list body) ;
+
+
+condition_compound_cmd  ::= Case(word_stack words, case_condition* body)
+			 | If(if_condition if_base, if_condition* elifs, compound_list? else)
+			 ;
+
+funcdef_compound_cmd	::= (identifier name, compound_command body, redirection? redir) ;
+
+
+compound_command	::= Grouped(grouped_compound_cmd grouped)
+			 | Looped(looped_compound_cmd looped)
+			 | Condition(condition_compound_cmd condition)
+			 | Function(funcdef_compound_cmd funcdef)
+			 ;
+
+
+shell			::= Word(word_stack words)
+			 | List(compound_list list)
+			 | SimpleCmd(simple_command simple_cmd)
+			 | CompoundCommand(compound_command compound_cmd)
+			 ;
+
+
+
+shell_body		::= (shell* elements, string shebang) ;
+
+
+
+
+
+
 
 
 
