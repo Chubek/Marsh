@@ -57,16 +57,13 @@ struct Process {
   pid_t pgid;
   pstate_t state;
   ioflags_t ioflags;
-  char *io_word;
-  int io_num;
-  int exit_stat;
-  int stop_stat;
-  int term_stat;
+  char *in_path;
+  char *out_path;
+  char *append_path;
   char *cmd_path;
   char **argv;
   size_t argc;
   bool is_async;
-  int fno_in, fno_out, fno_err;
   Process *next_p;
   Arena *scratch;
 };
@@ -78,6 +75,7 @@ struct Job {
   bool user_notified;
   struct termios tmodes;
   Process *first_p;
+  int fno_in, fno_out, fno_err;
   Job *next_j;
   Arena *scratch;
 };
@@ -227,95 +225,58 @@ Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
   return env;
 }
 
-void execute_process(Process *process, int prev_read_end, char **env_vars) {
-  pid_t id = process->pid = fork();
-  int channel[2];
+void execute_process(Process *process, char **env_vars) {
+  int in_fd = STDIN_FILENO, out_fd = STDOUT_FILENO, err_fd = STDERR_FILENO;
 
-  if (process->pgid == -1) {
-    if ((process->pgid = getgpid(0)) < 0) {
-      fputs("Runtime Error: Failed to obtain process' group id\n", stderr);
-      process->state = PSTATE_ABORTED;
-      return;
-    }
-  } else {
-    if (setgpid(id, process->pgid) < 0) {
-      fputs("Runtime Error: Failed to set process' group id\n", stderr);
-      process->state = PSTATE_ABORTED;
-      return;
+  if (process->in_path != NULL) {
+    in_fd = open(process->in_path, O_RDONLY);
+    if (in_fd == -1) {
+      perror("Failed to open input file for redirection");
     }
   }
 
-  if (id < 0) {
-    fputs("Runtime Error: Failed to spawn child process\n", stderr);
-    process->state = PSTATE_ABORTED;
-    return;
+  if (process->out_path != NULL) {
+    out_fd = open(process->out_path, O_WRONLY | O_CREAT | O_TRUNC, 0644);
+    if (out_fd == -1) {
+      perror("Failed to open output file for redirection");
+    }
   }
 
-  if (pipe(channel) < 0) {
-    fputs(
-        "Runtime Error: Failed to establish communication with child process\n",
-        stderr);
-    process->state = PSTATE_ABORTED;
-    return;
+  if (process->append_path != NULL) {
+    out_fd = open(process->append_path, O_WRONLY | O_CREAT | O_APPEND, 0644);
+    if (out_fd == -1) {
+      perror("Failed to open file for appending");
+    }
   }
 
-  if (prev_read_end != -1) {
-    if (dup2(prev_read_end, channel[0]) < 0) {
-      fputs("Runtime Error: Failed to read the previous process input\n",
-            stderr);
-      process->state = PSTATE_ABORTED;
-      return;
-    }
+  pid_t pid = fork();
+  if (pid == 0) {
+    if (in_fd != STDIN_FILENO)
+      dup2(in_fd, STDIN_FILENO);
+    if (out_fd != STDOUT_FILENO)
+      dup2(out_fd, STDOUT_FILENO);
+    if (err_fd != STDERR_FILENO)
+      dup2(err_fd, STDERR_FILENO);
 
-    if (prev_read_end != STDOUT_FILENO)
-      close(prev_read_end);
+    if (in_fd != STDIN_FILENO)
+      close(in_fd);
+    if (out_fd != STDOUT_FILENO)
+      close(out_fd);
+    if (err_fd != STDERR_FILENO)
+      close(err_fd);
+
+    execvpe(process->cmd_path, process->argv, env_vars);
+    perror("execvpe");
+  } else if (pid < 0) {
+    perror("fork");
   }
 
-  close(channel[1]);
-  process->fno_in = dup(channel[0]);
-  close(channel[0]);
-
-  if (!id) {
-    close(channel[0]);
-    process->fno_out = dup(channel[1]);
-    close(channel[1]);
-
-    if (process->fno_in < 0) {
-      fputs("Runtime Error: Failed to establish process input file\n", stderr);
-      process->state = PSTATE_ABORTED;
-      return;
-    }
-
-    if (handle_process_redirect(process) == -1) {
-      fputs("Runtime Error: Failed to redirect process\n", stderr);
-      process->state = PSTATE_ABORTED;
-      return;
-    }
-
-    if (process->is_async) {
-      struct sigaction handle_async_ign = {0};
-      struct sigaction handle_async_dfl = {0};
-      handle_async_ign.sa_handler = SIG_IGN;
-      handle_async_dfl.sa_handler = SIG_DFL;
-
-      if (sigaction(SIGINT, &handle_async_ign, NULL) < 0 ||
-          sigaction(SIGQUIT, &handle_async_ign, NULL) < 0 ||
-          sigaction(SIGCHLD, &handle_async_dfl, NULL)) {
-        fputs("Runtime Error: Failed to set up signal for async process\n",
-              stderr);
-        process->state = PSTATE_ABORTED;
-        return;
-      }
-    }
-
-    null_terminate_list(process->argv, process->argc);
-    execlpe(process->cmd_path, process->argv, env_vars);
-
-    fprintf(stderr, "Runtime Error: Failed to launch %s\n", process->cmd_path);
-    return;
-  }
-
-  process->state = PSTATE_RUNNING;
+  if (in_fd != STDIN_FILENO)
+    close(in_fd);
+  if (out_fd != STDOUT_FILENO)
+    close(out_fd);
+  if (err_fd != STDERR_FILENO)
+    close(err_fd);
 }
 
 void wait_on_process(Process *process, bool force) {
@@ -334,7 +295,7 @@ void wait_on_process(Process *process, bool force) {
 void set_process_state(Process *process) {
   if (WIFEXITED(process->exit_stat)) {
     process->state = PSTATE_EXITED;
-    process > exit_stat = WEXITSTAT(process->exit_stat);
+    process->exit_stat = WEXITSTAT(process->exit_stat);
   } else if (WIFSIGTERM(process->exit_stat)) {
     process->state = PSTATE_TERMINATED;
     process->term_stat = WTERMSIG(process->exit_stat);
@@ -346,31 +307,43 @@ void set_process_state(Process *process) {
 }
 
 void execute_job(Job *job, char **env_vars) {
-  Process *p;
-  int last_out = -1;
+  int pipe_fds[2];
+  int in_fd = STDIN_FILENO;
+  Process *process = job->first_process;
 
-  for (p = job->first_p; p != NULL; p = p->next) {
-    p->pgid = job->jpgid;
-    3execute_process(p, last_out, env_vars);
-    wait_on_process(p, false);
-
-    if (last_out > 2)
-      close(last_out);
-
-    job->jpgid = p->pgid;
-    last_out = dup(p->fno_out);
-
-    if (last_out < 0) {
-      fputs("Runtime Error: Failed to duplicate output file in job chain\n",
-            stderr);
-      return;
+  while (process != NULL) {
+    if (process->next_p != NULL) {
+      if (pipe(pipe_fds) == -1) {
+        perror("pipe");
+        exit(EXIT_FAILURE);
+      }
+    } else {
+      pipe_fds[0] = -1;
+      pipe_fds[1] = (process->out_path == NULL && process->append_path == NULL)
+                        ? STDOUT_FILENO
+                        : -1;
     }
 
-    close(p->fno_in);
-    close(p->fno_out);
-    close(p->fno_err);
-  }
+    if (process == job->first_process && process->in_path == NULL) {
+      in_fd = STDIN_FILENO;
+    }
 
-  if (last_out > 2)
-    close(last_out);
+    int out_fd = (process->next_p != NULL) ? pipe_fds[1] : STDOUT_FILENO;
+    if (process->out_path != NULL || process->append_path != NULL) {
+
+      out_fd = -1;
+    }
+
+    execute_process(process, env_vars);
+    if (in_fd != STDIN_FILENO) {
+      close(in_fd);
+    }
+    in_fd = pipe_fds[0];
+
+    if (out_fd != STDOUT_FILENO && out_fd != -1) {
+      close(pipe_fds[1]);
+    }
+
+    process = process->next_p;
+  }
 }
