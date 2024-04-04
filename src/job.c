@@ -31,32 +31,10 @@ typedef enum {
   JSTATE_STOPPED,
 } jobstate_t;
 
-typedef enum SignalFlags {
-  SIGFLAG_IGNORE_INT = 1 << 0,
-  SIGFLAG_IGNORE_QUIT = 1 << 1,
-  SIGFLAG_NOHUP = 1 << 2,
-  SIGFLAG_CUSTOM_CHLD = 1 << 3,
-  SIGFLAG_TSTP_TO_BG = 1 << 4,
-  SIGFLAG_INT_TO_TERM = 1 << 5,
-  SIGFLAG_QUIT_TO_TERM = 1 << 6,
-  SIGFLAG_CLEANUP_ZOMBIES = 1 << 7,
-  SIGFLAG_RESTORE_TTY = 1 << 8,
-  SIGFLAG_HANDLE_WINCH = 1 << 9,
-  SIGFLAG_EXIT_ON_TERM_CLOSE = 1 << 10,
-} sigflags_t;
-
-typedef enum IOFlags {
-  IO_READ = 1 << 1,
-  IO_WRITE = 1 << 2,
-  IO_APPEND = 1 << 3,
-  IO_STR = 1 << 4,
-} ioflags_t;
-
 struct Process {
   pid_t pid;
   pid_t pgid;
   pstate_t state;
-  ioflags_t ioflags;
   char *in_path;
   char *out_path;
   char *append_path;
@@ -85,10 +63,8 @@ struct Environ {
   int tty_fdesc;
   char *working_dir;
   char **env_vars;
-  int last_bg_job_id;
-  sigflags_t sigflags;
-  Job *first_j_fg;
-  Job *first_j_bg;
+  Job *fg_jobs;
+  Job *bg_jobs;
   Arena *scratch;
 };
 
@@ -217,17 +193,16 @@ Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
   env->last_bg_job_id = -1;
   env->sigflags = sigflags;
 
-  env->first_j_fg = NULL;
-  env->first_j_bg = NULL;
+  env->fg_jobs = NULL;
+  env->bg_jobs = NULL;
 
   env->scratch = arena_init(ENVIRON_INIT_ARENA_SIZE);
 
   return env;
 }
 
-void execute_process(Process *process, char **env_vars) {
-  int in_fd = STDIN_FILENO, out_fd = STDOUT_FILENO, err_fd = STDERR_FILENO;
-
+void execute_process(Process *process, int in_fd, int out_fd, int err_fd,
+                     char **env_vars) {
   if (process->in_path != NULL) {
     in_fd = open(process->in_path, O_RDONLY);
     if (in_fd == -1) {
@@ -251,19 +226,18 @@ void execute_process(Process *process, char **env_vars) {
 
   pid_t pid = fork();
   if (pid == 0) {
-    if (in_fd != STDIN_FILENO)
+    if (in_fd != STDIN_FILENO) {
       dup2(in_fd, STDIN_FILENO);
-    if (out_fd != STDOUT_FILENO)
-      dup2(out_fd, STDOUT_FILENO);
-    if (err_fd != STDERR_FILENO)
-      dup2(err_fd, STDERR_FILENO);
-
-    if (in_fd != STDIN_FILENO)
       close(in_fd);
-    if (out_fd != STDOUT_FILENO)
+    }
+    if (out_fd != STDOUT_FILENO) {
+      dup2(out_fd, STDOUT_FILENO);
       close(out_fd);
-    if (err_fd != STDERR_FILENO)
+    }
+    if (err_fd != STDERR_FILENO) {
+      dup2(err_fd, STDERR_FILENO);
       close(err_fd);
+    }
 
     execvpe(process->cmd_path, process->argv, env_vars);
     perror("execvpe");
@@ -308,15 +282,13 @@ void set_process_state(Process *process) {
 
 void execute_job(Job *job, char **env_vars) {
   int pipe_fds[2];
-  int in_fd = STDIN_FILENO;
+  int in_fd = STDIN_FILENO, err_fd = STDERR_FILENO;
   Process *process = job->first_process;
 
   while (process != NULL) {
     if (process->next_p != NULL) {
-      if (pipe(pipe_fds) == -1) {
+      if (pipe(pipe_fds) == -1)
         perror("pipe");
-        exit(EXIT_FAILURE);
-      }
     } else {
       pipe_fds[0] = -1;
       pipe_fds[1] = (process->out_path == NULL && process->append_path == NULL)
@@ -324,25 +296,22 @@ void execute_job(Job *job, char **env_vars) {
                         : -1;
     }
 
-    if (process == job->first_process && process->in_path == NULL) {
+    if (process == job->first_process && process->in_path == NULL)
       in_fd = STDIN_FILENO;
-    }
 
     int out_fd = (process->next_p != NULL) ? pipe_fds[1] : STDOUT_FILENO;
-    if (process->out_path != NULL || process->append_path != NULL) {
-
+    if (process->out_path != NULL || process->append_path != NULL)
       out_fd = -1;
-    }
 
-    execute_process(process, env_vars);
-    if (in_fd != STDIN_FILENO) {
+    execute_process(process, in_fd, out_fd, err_fd, env_vars);
+
+    if (in_fd != STDIN_FILENO)
       close(in_fd);
-    }
+
     in_fd = pipe_fds[0];
 
-    if (out_fd != STDOUT_FILENO && out_fd != -1) {
+    if (out_fd != STDOUT_FILENO && out_fd != -1)
       close(pipe_fds[1]);
-    }
 
     process = process->next_p;
   }
