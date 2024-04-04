@@ -48,12 +48,11 @@ struct Process {
 
 struct Job {
   int job_id;
-  pid_t jpgid;
+  pid_t job_pgid;
   jstate_t state;
   bool user_notified;
   struct termios tmodes;
   Process *first_p;
-  int fno_in, fno_out, fno_err;
   Job *next_j;
   Arena *scratch;
 };
@@ -68,6 +67,8 @@ struct Environ {
   Arena *scratch;
 };
 
+
+
 Process *get_process_by_pid(Job *job, pid_t pid) {
   Process *p;
   for (p = job->first_p; p != NULL; p = p->next)
@@ -78,14 +79,10 @@ Process *get_process_by_pid(Job *job, pid_t pid) {
 }
 
 Process *get_process_chain_by_pgid(Job *job, pid_t pgid) {
-  Process *p, *dup, *chain = NULL;
+  Process *p, *chain = NULL;
   for (p = job->first_p; p != NULL; p = p->next) {
     if (p->pgid == pgid) {
-      dup = (Process *)arena_alloc(job->scratch, sizeof(Process));
-      memmove(dup, p, sizeof(Process));
-
-      dup->next = chain;
-      chain = dup;
+	// TODO: Implement
     }
   }
 
@@ -101,97 +98,27 @@ Job *get_job_by_job_id(Environ *env, int job_id, bool bg) {
   return NULL;
 }
 
-Job *get_job_chain_by_jpgid(Environ *env, pid_t jpgid, bool bg) {
-  Job *j, *dup, *chain = NULL;
-  for (j = bg ? env->first_bg_j : env->first_fg_j; j != NULL; j = j->next) {
-    if (j->jpgid == jpgid) {
-      dup = (Job *)arena_alloc(env->scratch, sizeof(Job));
-      memmove(dup, j, sizeof(Job));
 
-      dup->next = chain;
-      chain = dup;
+Job *get_job_chain_by_job_pgid(Environ *env, pid_t job_pgid, bool bg) {
+  Job *j, *chain = NULL;
+  for (j = bg ? env->first_bg_j : env->first_fg_j; j != NULL; j = j->next) {
+    if (j->job_pgid == job_pgid) {
+    	// TODO: Implement
     }
   }
 
   return chain;
 }
 
-Process *push_blank_process_to_job(Job *job, ioflags_t io_flags, char *io_word,
-                                   int io_num, char *cmd_path, char **argv,
-                                   size_t argc, bool is_async) {
-  Process *p = (Process *)arena_alloc(job->scratch, sizeof(Process)), *pprime;
-  p->scratch = arena_init(PROCESS_INIT_ARENA_SIZE);
 
-  if (job->first_p == NULL)
-    job->first_p = p;
-  else {
-    for (pprime = job->first_p; pprime->next != NULL; pprime = pprime->next)
-      ;
-    p->next_p = NULL;
-    pprime->next_p = p;
-  }
 
-  p->io_flags = io_flags;
-  p->io_word = duplicate_string(p->scratch, io_word);
-  p->io_num = io_num;
-  p->cmd_path = duplicate_string(p->scratch, cmd_path);
-  p->argv = duplicate_strings(p->scratch, argv, argc);
-  p->argc = argc;
-  p->is_async = is_async;
-
-  p->state = PSTATE_PENDING;
-  p->pid = -1;
-  p->pgid = job->jpgid;
-
-  p->exit_stat = -1;
-  p->stop_stat = -1;
-  p->exit_stat = -1;
-
-  p->fno_in = STDIN_FILENO;
-  p->fno_out = STDOUT_FILENO;
-  p->fno_err = STDERR_FILENO;
-
-  return p;
-}
-
-Job *push_blank_job_to_environ(Environ *env, int job_id) {
-  Job *j = (Job *)arena_alloc(env->scratch, sizeof(Job)), *jprime;
-  j->scratch = arena_init(JOB_INIT_ARENA_SIZE);
-
-  if (env->first_j == NULL)
-    env->first_j = j;
-  else {
-    for (jprime = env->first_j; jprime->next != NULL; jprime = jprime->next)
-      ;
-    j->next_j = NULL;
-    jprime->next_j = j;
-  }
-
-  j->job_id = job_id;
-  j->jpgid = -1;
-
-  j->state = JSTATE_PENDING;
-  j->user_notified = false;
-
-  j->first_p = NULL;
-
-  if (tcgetattr(env->tty_fdesc, &j->tmodes) == -1) {
-    fprintf("Error: Could not get terminal attributes");
-    exit(EXIT_FAILURE);
-  }
-
-  return j;
-}
 
 Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
-                      char **env_vars, sigflags_t sigflags) {
+                      char **env_vars) {
   env->session_id = getsid(0);
   env->tty_fdesc = tty_fdesc;
   env->working_dir = working_dir;
   env->env_vars = env_vars;
-
-  env->last_bg_job_id = -1;
-  env->sigflags = sigflags;
 
   env->fg_jobs = NULL;
   env->bg_jobs = NULL;
@@ -200,6 +127,27 @@ Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
 
   return env;
 }
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 void execute_process(Process *process, int in_fd, int out_fd, int err_fd,
                      char **env_vars) {
