@@ -74,9 +74,11 @@ integer			::= { digit }
 
 ## B.1: Quoting
 
-single-quote		::= "'" { printable } "'"
+literal			::= { printable }
 
-double-quote		::= '"' { visible-expansion | escape-character | printable } '"'
+single-quote		::= "'" { literal } "'"
+
+double-quote		::= '"' { word } '"'
 
 quoted-literal		::= single-quote | double-quote
 
@@ -204,7 +206,17 @@ command-substitution	::= enclosed-substitute | backtick-substitute
 
 ## B.10: Arithmetic Expansion
 
-arithmetic-expression	::= ? a valid arithmetic expression ?
+arithmetic-expression	::= word '+' word
+			 | word '-' word
+			 | word '*' word
+			 | word '/' word
+			 | word '%' word
+			 | word '|' word
+			 | word '&' word
+			 | word '^' word
+			 | word "**" word
+			 | word ">>" word
+			 | word "<<" word
 
 
 arithmetic-expansion    ::= "$((" arithmetic-expression ')'
@@ -352,6 +364,7 @@ word			::= word-expansion
 			 | glob-word
 			 | identifier
 			 | quoted-literal
+			 | literal
 
 
 
