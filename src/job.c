@@ -10,7 +10,7 @@
 #include <sys/wait.h>
 #include <unistd.h>
 
-#include "jobexec.h"
+#include "job.h"
 #include "utils.h"
 
 typedef enum {
@@ -35,12 +35,11 @@ struct Process {
   pid_t pid;
   pid_t pgid;
   pstate_t state;
-  char *in_path;
-  char *out_path;
-  char *append_path;
-  char *cmd_path;
-  char **argv;
-  size_t argc;
+  String in_path;
+  String out_path;
+  String append_path;
+  String cmd_path;
+  StringList *arguments;
   bool is_async;
   Process *next_p;
   Arena *scratch;
@@ -60,14 +59,12 @@ struct Job {
 struct Environ {
   pid_t session_id;
   int tty_fdesc;
-  char *working_dir;
-  char **env_vars;
+  String working_dir;
+  StringList *env_vars;
   Job *fg_jobs;
   Job *bg_jobs;
   Arena *scratch;
 };
-
-
 
 Process *get_process_by_pid(Job *job, pid_t pid) {
   Process *p;
@@ -82,7 +79,7 @@ Process *get_process_chain_by_pgid(Job *job, pid_t pgid) {
   Process *p, *chain = NULL;
   for (p = job->first_p; p != NULL; p = p->next) {
     if (p->pgid == pgid) {
-	// TODO: Implement
+      // TODO: Implement
     }
   }
 
@@ -98,23 +95,19 @@ Job *get_job_by_job_id(Environ *env, int job_id, bool bg) {
   return NULL;
 }
 
-
 Job *get_job_chain_by_job_pgid(Environ *env, pid_t job_pgid, bool bg) {
   Job *j, *chain = NULL;
   for (j = bg ? env->first_bg_j : env->first_fg_j; j != NULL; j = j->next) {
     if (j->job_pgid == job_pgid) {
-    	// TODO: Implement
+      // TODO: Implement
     }
   }
 
   return chain;
 }
 
-
-
-
-Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
-                      char **env_vars) {
+Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
+                      String *env_vars) {
   env->session_id = getsid(0);
   env->tty_fdesc = tty_fdesc;
   env->working_dir = working_dir;
@@ -123,34 +116,24 @@ Environ *init_environ(Environ *env, int tty_fdesc, char *working_dir,
   env->fg_jobs = NULL;
   env->bg_jobs = NULL;
 
-  env->scratch = arena_init(ENVIRON_INIT_ARENA_SIZE);
+  env->scratch = arena_init(ARENA_INIT_ENVIRON);
 
   return env;
 }
 
+Process *append_process_to_chain(Process *chain, String *cmd_path,
+                                 StringList arguments, String *in_path,
+                                 String *out_path, String *append_path,
+                                 bool is_async) {
+  // TODO: Implement
+}
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
+Job *append_job_to_chain(Job *chain, int job_id) {
+  // TODO: Implement
+}
 
 void execute_process(Process *process, int in_fd, int out_fd, int err_fd,
-                     char **env_vars) {
+                     StringList *env_vars) {
   if (process->in_path != NULL) {
     in_fd = open(process->in_path, O_RDONLY);
     if (in_fd == -1) {
@@ -187,7 +170,13 @@ void execute_process(Process *process, int in_fd, int out_fd, int err_fd,
       close(err_fd);
     }
 
-    execvpe(process->cmd_path, process->argv, env_vars);
+    char *cmd_path_asciiz =
+        get_string_asciiz(process->cmd_path, process->scratch);
+    char **arguments_asciiz =
+        get_strings_asciiz(process->arguments, process->scratch);
+    char **env_vars_asciiz = get_strings_asciiz(env_vars, process->scratch);
+
+    execvpe(cmd_path_asciiz, process->arguments_asciiz, env_vars_asciiz);
     perror("execvpe");
   } else if (pid < 0) {
     perror("fork");
@@ -228,7 +217,7 @@ void set_process_state(Process *process) {
     process->state = PSTATE_UNKNOWN;
 }
 
-void execute_job(Job *job, char **env_vars) {
+void execute_job(Job *job, String *env_vars) {
   int pipe_fds[2];
   int in_fd = STDIN_FILENO, err_fd = STDERR_FILENO;
   Process *process = job->first_process;
