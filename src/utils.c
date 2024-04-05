@@ -33,6 +33,7 @@ struct Arena {
 struct String {
   uint8_t *buf;
   size_t len;
+  String *next;
 };
 
 struct Symbol {
@@ -77,6 +78,8 @@ void arena_reset(Arena *arena) { arena->next = arena->buffer; }
 
 void arena_free(Arena *arena) { free(arena); }
 
+
+
 String *create_string(uint8_t *source, ssize_t len, Arena *scratch) {
   if (source == NULL)
     return NULL;
@@ -87,7 +90,42 @@ String *create_string(uint8_t *source, ssize_t len, Arena *scratch) {
   string->buf = (uint8_t *)arena_alloc(scratch, len);
   string->len = len;
 
+  String->next = NULL;
+
   return string;
+}
+
+String *create_and_append_string(String **chain, uint8_t *source, ssize_t len, Arena *scratch) {
+   if (chain == NULL)
+	   return NULL;
+
+   String *s = create_string(source, len, scratch);
+
+   if (next == NULL)
+	   return NULL;
+
+   if (*chain == NULL) {
+	*chain = s;
+	return s;
+   }
+
+   for (String *schain = *chain; schain->next != NULL; schain = schain->next);
+   schain->next = s;
+
+   return s;
+}
+
+void append_string(String **chain, String *s) {
+	if (chain == NULL)
+		return;
+
+	if (*chain == NULL) {
+		*chain = s;
+		return;
+	}
+
+	for (String *schain = *chain; schain->next != NULL; schain = schain->next);
+	schain->next = s;
 }
 
 uint16_t hash_string(String *key) {
@@ -104,6 +142,7 @@ String *duplicate_string(String *orig, Arena *scratch) {
   String *dup = arena_alloc(scratch, sizeof(String));
   dup->buf = (uint8_t *)arena_alloc(scratch, orig->len);
   dup->len = orig->len;
+  dup->next = NULL;
   return dup;
 }
 
