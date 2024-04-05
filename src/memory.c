@@ -12,7 +12,10 @@
 
 extern Symtbl *symtbl;
 
-//=> alloc stab_heap, stab_alloc, stab_realloc, stab_free
+//=> alloc region_heap, region_alloc, region_realloc, region_dump
+//=> alloc stab_heap, stab_alloc, stab_realloc, stab_dump
+//=> alloc str_backup_heap, str_backup_alloc, str_backup_realloc,
+//str_backup_dump
 //=> hashfunc stab_heap_hfunc
 
 typedef enum {
@@ -25,9 +28,9 @@ typedef enum {
 } strcmp_t;
 
 struct Arena {
-  char *next;
-  char *end;
-  char buffer[];
+  uint8_t *next;
+  uint8_t *end;
+  uint8_t buffer[];
 };
 
 struct String {
@@ -58,7 +61,7 @@ struct Symtbl {
 };
 
 Arena *arena_init(size_t size) {
-  Arena *arena = malloc(sizeof(Arena) + size);
+  Arena *arena = region_alloc(sizeof(Arena) + size);
   if (arena) {
     arena->next = arena->buffer;
     arena->end = arena->buffer + size;
@@ -86,8 +89,14 @@ String *create_string(uint8_t *source, ssize_t len, Arena *scratch) {
 
   String *string = (String *)arena_alloc(scratch, sizeof(String));
   string->buf = (uint8_t *)arena_alloc(scratch, len);
-  string->len = len;
 
+  if (buf == NULL) {
+    buf = (uint8_t *)str_backup_alloc(len);
+    if (buf == NULL)
+      return NULL;
+  }
+
+  string->len = len;
   String->next = NULL;
 
   return string;
@@ -108,9 +117,10 @@ String *create_and_append_string(String **chain, uint8_t *source, ssize_t len,
     return s;
   }
 
-  for (String *schain = *chain; schain->next != NULL; schain = schain->next)
+  for (String *chain_deref = *chain; chain_deref->next != NULL;
+       chain_deref = chain_deref->next)
     ;
-  schain->next = s;
+  chain_deref->next = s;
 
   return s;
 }
@@ -124,9 +134,10 @@ void append_string(String **chain, String *s) {
     return;
   }
 
-  for (String *schain = *chain; schain->next != NULL; schain = schain->next)
+  for (String *chain_deref = *chain; chain_deref->next != NULL;
+       chain_deref = chain_deref->next)
     ;
-  schain->next = s;
+  chain_deref->next = s;
 }
 
 size_t get_num_strings(String *head) {
@@ -136,16 +147,31 @@ size_t get_num_strings(String *head) {
   return n;
 }
 
-char *string_to_asciiz(String *s, Arena *scratch) {
-  char *asciiz = (char *)arena_alloc(scratch, s->len + 1);
+uint8_t *string_to_asciiz(String *s, Arena *scratch) {
+  uint8_t *asciiz = (uint8_t *)arena_alloc(scratch, s->len + 1);
+
+  if (asciiz == NULL) {
+    asciiz = (uint8_t *)string_backup_alloc(s->len + 1);
+    if (asciiz == NULL)
+      return NULL;
+  }
+
   memmove(&asciiz[0], &s->buf[0], s->len);
   return asciiz;
 }
 
-char **strings_to_asciiz_list(String *head, Arena *scratch) {
+uint8_t **strings_to_asciiz_list(String *head, Arena *scratch) {
   size_t num_str = get_num_strings(head);
-  char **asciiz_list =
-      (char **)arena_alloc(scratch, (num_str + 1) * sizeof(char *));
+  uint8_t **asciiz_list =
+      (uint8_t **)arena_alloc(scratch, (num_str + 1) * sizeof(uint8_t *));
+
+  if (asciiz_list == NULL) {
+    asciiz_list =
+        (uint8_t **)str_backup_alloc((num_str + 1) * sizeof(uint8_t *));
+    if (asciiz_list == NULL)
+      return NULL;
+  }
+
   asciiz_list[num_str] = NULL;
 
   for (size_t i = 0; i < num_str; i++) {
@@ -169,6 +195,13 @@ uint16_t hash_string(String *key) {
 String *duplicate_string(String *orig, Arena *scratch) {
   String *dup = arena_alloc(scratch, sizeof(String));
   dup->buf = (uint8_t *)arena_alloc(scratch, orig->len);
+
+  if (dup->buf == NULL) {
+    dup->buf = (uint8_t *)str_backup_alloc(orig->len);
+    if (dup->buf == NULL)
+      return NULL;
+  }
+
   dup->len = orig->len;
   dup->next = NULL;
   return dup;
