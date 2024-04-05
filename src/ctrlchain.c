@@ -15,7 +15,8 @@
 #include "memory.h"
 #include "notify.h"
 
-//=> alloc ctrl_backup_heap, ctrl_backup_alloc, ctrl_backup_realloc, ctrl_backup_dump
+//=> alloc ctrl_backup_heap, ctrl_backup_alloc, ctrl_backup_realloc,
+//ctrl_backup_dump
 //=> hashfunc ctrl_backup_heap_hashfn
 
 struct Process {
