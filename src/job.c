@@ -15,9 +15,10 @@
 #include "memory.h"
 #include "notify.h"
 
-//=> alloc ctrl_backup_heap, ctrl_backup_alloc, ctrl_backup_realloc,
-//ctrl_backup_dump
-//=> hashfunc ctrl_backup_heap_hashfn
+
+//=> alloc cbu_heap, cbu_alloc, cbu_realloc, cbu_dump
+//=> hashfunc cbu_heap_hashfn
+
 
 struct Process {
   pid_t pid;
@@ -88,22 +89,16 @@ Process *append_process_to_chain(Process **chain, ProcessIO *io,
   Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
 
   if (p == NULL) {
-    p = (Process *)ctrl_backup_alloc(sizeof(Process));
+    p = (Process *)cbu_alloc(sizeof(Process));
     if (p == NULL)
       return NULL;
   }
 
   p->scratch = arena_init(ARENA_INIT_SIZE_PROCESS);
-
   p->cmd_path = duplicate_string(cmd_path, p->scratch);
   p->arguments = duplicate_string_list(arguments, p->scratch);
-
-  p->in_path = duplicate_string(in_path, p->scratch);
-  p->out_path = duplcate_string(out_path, p->scratch);
-  p->append_path = duplicate_string(append_path, p->scratch);
-
+  p->io = io;
   p->is_async = is_async;
-
   p->next_p = NULL;
 
   if (*chain == NULL) {
@@ -123,18 +118,15 @@ Job *append_job_to_chain(Job **chain, int job_id, Arena *scratch) {
   Job *j = (Job *)arena_alloc(scratch, sizeof(Job));
 
   if (j == NULL) {
-    j = (Job *)ctrl_backup_alloc(sizeof(Job));
+    j = (Job *)cbu_alloc(sizeof(Job));
     if (j == NULL)
       return NULL;
   }
 
   j->scratch = arena_init(ARENA_INIT_SIZE_JOB);
-
   j->job_id = job_id;
-
   j->first_p = NULL;
   j->next_j = NULL;
-
   if (*chain == NULL) {
     *chain = j;
     return j;
