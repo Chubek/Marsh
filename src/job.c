@@ -66,44 +66,20 @@ struct Environ {
   Arena *scratch;
 };
 
-Process *get_process_by_pid(Job *job, pid_t pid) {
-  Process *p;
-  for (p = job->first_p; p != NULL; p = p->next)
+Process *get_process_by_pid(Process *chain, pid_t pid) {
+  for (Process *p = job->first_p; p != NULL; p = p->next)
     if (p->pid == pid)
       return p;
 
   return NULL;
 }
 
-Process *get_process_chain_by_pgid(Job *job, pid_t pgid) {
-  Process *p, *chain = NULL;
-  for (p = job->first_p; p != NULL; p = p->next) {
-    if (p->pgid == pgid) {
-      // TODO: Implement
-    }
-  }
-
-  return chain;
-}
-
-Job *get_job_by_job_id(Environ *env, int job_id, bool bg) {
-  Job *j;
-  for (j = bg ? env->first_bg_j : env->first_fg_j; j != NULL; j = j->next)
+Job *get_job_by_job_id(Job *chain, int job_id) {
+  for (Job *j = chain; j != NULL; j = j->next)
     if (j->id == id)
       return j;
 
   return NULL;
-}
-
-Job *get_job_chain_by_job_pgid(Environ *env, pid_t job_pgid, bool bg) {
-  Job *j, *chain = NULL;
-  for (j = bg ? env->first_bg_j : env->first_fg_j; j != NULL; j = j->next) {
-    if (j->job_pgid == job_pgid) {
-      // TODO: Implement
-    }
-  }
-
-  return chain;
 }
 
 Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
@@ -121,71 +97,70 @@ Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
   return env;
 }
 
-Process *append_process_to_chain(Process **chain, String *cmd_path,
+Process *append_process_to_chain(Process *chain, String *cmd_path,
                                  String *arguments, String *in_path,
                                  String *out_path, String *append_path,
                                  bool is_async, Arena *scratch) {
-alloc:
-	Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
+  Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
 
-	if (p == NULL) {
-		scratch = arena_reset(scratch);
-		goto alloc;
-	}
-	
-	p->scratch = arena_init(ARENA_INIT_SIZE_PROCESS);
+  if (p == NULL) {
+    scratch = arena_reset(scratch);
+    p = (Process *)arena_alloc(scratch, sizeof(Process));
+  }
 
-	p->cmd_path = duplicate_string(cmd_path, p->scratch);
-	p->arguments = duplicate_string_list(arguments, p->scratch);
+  p->scratch = arena_init(ARENA_INIT_SIZE_PROCESS);
 
-	p->in_path = duplicate_string(in_path, p->scratch);
-	p->out_path = duplcate_string(out_path, p->scratch);
-	p->append_path = duplicate_string(append_path, p->scratch);
+  p->cmd_path = duplicate_string(cmd_path, p->scratch);
+  p->arguments = duplicate_string_list(arguments, p->scratch);
 
-	p->is_async = is_async;
+  p->in_path = duplicate_string(in_path, p->scratch);
+  p->out_path = duplcate_string(out_path, p->scratch);
+  p->append_path = duplicate_string(append_path, p->scratch);
 
-	p->next_p = NULL;
+  p->is_async = is_async;
 
-	if (*chain == NULL) {
-		*chain = p;
-		return p;
-	}
+  p->next_p = NULL;
 
-	for (Process *pchain = *chain; pchain->next != NULL; pchain = pchain->next);
-	pchain->next = p;
+  if (chain == NULL) {
+    Process **ptr = &chain;
+    *chain = p;
+    return p;
+  }
 
-	return p;
+  for (; chain->next != NULL; chain = chain->next)
+    ;
+  chain->next = p;
+
+  return p;
 }
 
+Job *append_job_to_chain(Job *chain, int job_id, Arena *scratch) {
+  Job *j = (Job *)arena_alloc(scratch, sizeof(Job));
 
-Job *append_job_to_chain(Job **chain, int job_id, Arena *scratch) {
+  if (j == NULL) {
+    j = arena_reset(scratch);
+    j = (Job *)arena_alloc(scratch, sizeof(Job));
+  }
 
-alloc:
-	Job *j = (Job *)arena_alloc(scratch, sizeof(Job));
+  j->scratch = arena_init(ARENA_INIT_SIZE_JOB);
 
-	if (j == NULL) {
-		j = arena_reset(scratch);
-		goto alloc;
-	}
+  j->job_id = job_id;
 
-	j->scratch = arena_init(ARENA_INIT_SIZE_JOB);
+  j->first_p = NULL;
+  j->next_j = NULL;
 
-	j->job_id = job_id;
+  if (chain == NULL) {
+    Job **ptr = &chain;
+    *chain = j;
+    return j;
+  }
 
-	j->first_p = NULL;
-	j->next_j = NULL;
+  for (; chain->next != NULL; chain = chain->next)
+    ;
+  chain->next = j;
 
-	if (*chain == NULL) {
-		*chain = j;
-		return j;
-	}
-
-	for (Job *jchain = *chain; jchain->next != NULL; jchain = jchain->next);
-	jchain->next = j;
-
-	return j;
+  return j;
 }
-
 
 void execute_process(Process *process, int in_fd, int out_fd, int err_fd,
                      String *env_vars) {
