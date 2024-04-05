@@ -115,7 +115,7 @@ special-parameters	::=  (
 			 | special-param-all-pos-b
 			 | special-param-pos-num
 			 | special-param-last-exit
-			 | special-param-asyncp-job
+			 | special-param-async-job
 			 | special-param-proc-id
 			 | special-param-flag-opts
 			 | special-param-env-name
@@ -383,7 +383,7 @@ pipeline		::= [ '!' ] simple-command { '|' simple-command }
 
 ## B.23: Lists
 
-asnyc-list		::= compound-list { '&' compound-list }
+async-list		::= compound-list { '&' compound-list }
 
 
 sequential-list		::= compound-list { ';' compound-list }
