@@ -136,7 +136,7 @@ alloc:
 	p->scratch = arena_init(ARENA_INIT_SIZE_PROCESS);
 
 	p->cmd_path = duplicate_string(cmd_path, p->scratch);
-	p->arguments = duplicate_argument_list(arguments, p->scratch);
+	p->arguments = duplicate_string_list(arguments, p->scratch);
 
 	p->in_path = duplicate_string(in_path, p->scratch);
 	p->out_path = duplcate_string(out_path, p->scratch);
@@ -151,8 +151,8 @@ alloc:
 		return p;
 	}
 
-	for (Process *c = *chain; c->next != NULL; c = c->next);
-	c->next = p;
+	for (Process *pchain = *chain; pchain->next != NULL; pchain = pchain->next);
+	pchain->next = p;
 
 	return p;
 }
@@ -180,8 +180,8 @@ alloc:
 		return j;
 	}
 
-	for (Job *c = *chain; c->next != NULL; c = c->next);
-	c->next = j;
+	for (Job *jchain = *chain; jchain->next != NULL; jchain = jchain->next);
+	jchain->next = j;
 
 	return j;
 }
