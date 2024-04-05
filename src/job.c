@@ -35,10 +35,10 @@ struct Process {
   pid_t pid;
   pid_t pgid;
   pstate_t state;
-  String in_path;
-  String out_path;
-  String append_path;
-  String cmd_path;
+  String *in_path;
+  String *out_path;
+  String *append_path;
+  String *cmd_path;
   StringList *arguments;
   bool is_async;
   Process *next_p;
@@ -116,21 +116,76 @@ Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
   env->fg_jobs = NULL;
   env->bg_jobs = NULL;
 
-  env->scratch = arena_init(ARENA_INIT_ENVIRON);
+  env->scratch = arena_init(ARENA_INIT_SIZE_ENVIRON);
 
   return env;
 }
 
-Process *append_process_to_chain(Process *chain, String *cmd_path,
-                                 StringList arguments, String *in_path,
+Process *append_process_to_chain(Process **chain, String *cmd_path,
+                                 StringList *arguments, String *in_path,
                                  String *out_path, String *append_path,
-                                 bool is_async) {
-  // TODO: Implement
+                                 bool is_async, Arena *scratch) {
+alloc:
+	Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
+
+	if (p == NULL) {
+		scratch = arena_reset(scratch);
+		goto alloc;
+	}
+	
+	p->scratch = arena_init(ARENA_INIT_SIZE_PROCESS);
+
+	p->cmd_path = duplicate_string(cmd_path, p->scratch);
+	p->arguments = duplicate_argument_list(arguments, p->scratch);
+
+	p->in_path = duplicate_string(in_path, p->scratch);
+	p->out_path = duplcate_string(out_path, p->scratch);
+	p->append_path = duplicate_string(append_path, p->scratch);
+
+	p->is_async = is_async;
+
+	p->next_p = NULL;
+
+	if (*chain == NULL) {
+		*chain = p;
+		return p;
+	}
+
+	for (Process *c = *chain; c->next != NULL; c = c->next);
+	c->next = p;
+
+	return p;
 }
 
-Job *append_job_to_chain(Job *chain, int job_id) {
-  // TODO: Implement
+
+Job *append_job_to_chain(Job **chain, int job_id, Arena *scratch) {
+
+alloc:
+	Job *j = (Job *)arena_alloc(scratch, sizeof(Job));
+
+	if (j == NULL) {
+		j = arena_reset(scratch);
+		goto alloc;
+	}
+
+	j->scratch = arena_init(ARENA_INIT_SIZE_JOB);
+
+	j->job_id = job_id;
+
+	j->first_p = NULL;
+	j->next_j = NULL;
+
+	if (*chain == NULL) {
+		*chain = j;
+		return j;
+	}
+
+	for (Job *c = *chain; c->next != NULL; c = c->next);
+	c->next = j;
+
+	return j;
 }
+
 
 void execute_process(Process *process, int in_fd, int out_fd, int err_fd,
                      StringList *env_vars) {
@@ -173,8 +228,8 @@ void execute_process(Process *process, int in_fd, int out_fd, int err_fd,
     char *cmd_path_asciiz =
         get_string_asciiz(process->cmd_path, process->scratch);
     char **arguments_asciiz =
-        get_strings_asciiz(process->arguments, process->scratch);
-    char **env_vars_asciiz = get_strings_asciiz(env_vars, process->scratch);
+        get_string_list_asciiz(process->arguments, process->scratch);
+    char **env_vars_asciiz = get_string_list_asciiz(env_vars, process->scratch);
 
     execvpe(cmd_path_asciiz, process->arguments_asciiz, env_vars_asciiz);
     perror("execvpe");
