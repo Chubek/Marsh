@@ -39,7 +39,7 @@ struct Process {
   String *out_path;
   String *append_path;
   String *cmd_path;
-  StringList *arguments;
+  String *arguments;
   bool is_async;
   Process *next_p;
   Arena *scratch;
@@ -60,7 +60,7 @@ struct Environ {
   pid_t session_id;
   int tty_fdesc;
   String working_dir;
-  StringList *env_vars;
+  String *env_vars;
   Job *fg_jobs;
   Job *bg_jobs;
   Arena *scratch;
@@ -122,7 +122,7 @@ Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
 }
 
 Process *append_process_to_chain(Process **chain, String *cmd_path,
-                                 StringList *arguments, String *in_path,
+                                 String *arguments, String *in_path,
                                  String *out_path, String *append_path,
                                  bool is_async, Arena *scratch) {
 alloc:
@@ -188,7 +188,7 @@ alloc:
 
 
 void execute_process(Process *process, int in_fd, int out_fd, int err_fd,
-                     StringList *env_vars) {
+                     String *env_vars) {
   if (process->in_path != NULL) {
     in_fd = open(process->in_path, O_RDONLY);
     if (in_fd == -1) {
