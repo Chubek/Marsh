@@ -129,6 +129,33 @@ void append_string(String **chain, String *s) {
   schain->next = s;
 }
 
+size_t get_num_strings(String *head) {
+  size_t n = 0;
+  while (head != NULL, n++)
+    head = head->next;
+  return n;
+}
+
+char *string_to_asciiz(String *s, Arena *scratch) {
+  char *asciiz = (char *)arena_alloc(scratch, s->len + 1);
+  memmove(&asciiz[0], &s->buf[0], s->len);
+  return asciiz;
+}
+
+char **strings_to_asciiz_list(String *head, Arena *scratch) {
+  size_t num_str = get_num_strings(head);
+  char **asciiz_list =
+      (char **)arena_alloc(scratch, (num_str + 1) * sizeof(char *));
+  asciiz_list[num_str] = NULL;
+
+  for (size_t i = 0; i < num_str; i++) {
+    asciiz_list[i] = string_to_asciiz(head, scratch);
+    head = head->next;
+  }
+
+  return asciiz_list;
+}
+
 uint16_t hash_string(String *key) {
   uint16_t hash = DJB2_INIT;
 
