@@ -15,8 +15,8 @@
 #include "memory.h"
 #include "notify.h"
 
-//=> alloc backup_heap, backup_alloc, backup_realloc, backup_dump
-//=> hashfunc backup_heap_hashfn
+//=> alloc ctrl_backup_heap, ctrl_backup_alloc, ctrl_backup_realloc, ctrl_backup_dump
+//=> hashfunc ctrl_backup_heap_hashfn
 
 struct Process {
   pid_t pid;
@@ -87,7 +87,7 @@ Process *append_process_to_chain(Process **chain, ProcessIO *io,
   Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
 
   if (p == NULL) {
-    p = (Process *)backup_alloc(sizeof(Process));
+    p = (Process *)ctrl_backup_alloc(sizeof(Process));
     if (p == NULL)
       return NULL;
   }
@@ -122,7 +122,7 @@ Job *append_job_to_chain(Job **chain, int job_id, Arena *scratch) {
   Job *j = (Job *)arena_alloc(scratch, sizeof(Job));
 
   if (j == NULL) {
-    j = (Job *)backup_alloc(sizeof(Job));
+    j = (Job *)ctrl_backup_alloc(sizeof(Job));
     if (j == NULL)
       return NULL;
   }
