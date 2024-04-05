@@ -207,6 +207,15 @@ String *duplicate_string(String *orig, Arena *scratch) {
   return dup;
 }
 
+String *duplicate_string_list(String *chain, Arena *scratch) {
+   String *dup_chain = NULL;
+   while (chain != NULL) {
+	append_string(&dup_chain, duplicate_string(chain));
+	chain = chain->next;
+   }
+   return dup_chain;
+}
+
 strcmp_t compare_strings(String *s1, String *s2) {
   if (s1 == NULL || s2 == NULL)
     return STRCMP_NULL;
