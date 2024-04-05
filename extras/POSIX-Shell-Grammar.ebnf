@@ -148,7 +148,15 @@ tilde-expansion		::= '~'
 
 ## B.6: Pathname Expansion
 
-pathname-expansion	::= ? expand globs ?
+pathname-glob		::= glob | '/'
+
+pathname-cwd		::= '.'
+
+pathname-pwd		::= ".."
+
+pathname-expansion	::= pathname-glob
+			 | pathname-cwd
+			 | pathname-pwd
 
 
 
