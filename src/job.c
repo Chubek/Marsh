@@ -15,7 +15,6 @@
 //=> alloc cbu_heap, cbu_alloc, cbu_realloc, cbu_dump
 //=> hashfunc cbu_heap_hashfn
 
-
 struct Process {
   pid_t pid;
   pid_t pgid;

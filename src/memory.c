@@ -15,7 +15,7 @@ extern Symtbl *symtbl;
 //=> alloc region_heap, region_alloc, region_realloc, region_dump
 //=> alloc stab_heap, stab_alloc, stab_realloc, stab_dump
 //=> alloc str_backup_heap, str_backup_alloc, str_backup_realloc,
-//str_backup_dump
+// str_backup_dump
 //=> hashfunc stab_heap_hfunc
 
 typedef enum {
@@ -208,12 +208,12 @@ String *duplicate_string(String *orig, Arena *scratch) {
 }
 
 String *duplicate_string_list(String *chain, Arena *scratch) {
-   String *dup_chain = NULL;
-   while (chain != NULL) {
-	append_string(&dup_chain, duplicate_string(chain));
-	chain = chain->next;
-   }
-   return dup_chain;
+  String *dup_chain = NULL;
+  while (chain != NULL) {
+    append_string(&dup_chain, duplicate_string(chain));
+    chain = chain->next;
+  }
+  return dup_chain;
 }
 
 strcmp_t compare_strings(String *s1, String *s2) {
