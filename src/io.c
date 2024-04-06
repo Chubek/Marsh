@@ -17,22 +17,22 @@ struct ProcessIO {
   Arena *scratch;
 };
 
-void ProcessIO_init(ProcessIO *pio, struct Arena *arena) {
+void process_io_init(ProcessIO *pio, struct Arena *arena) {
   // TODO
 }
 
-void ProcessIO_redirect_in(ProcessIO *pio, String *file_path) {
+void process_io_redirect_in(ProcessIO *pio, String *file_path) {
   // TODO
 }
 
-void ProcessIO_redirect_out(ProcessIO *pio, String *file_path) {
+void process_io_redirect_out(ProcessIO *pio, String *file_path) {
   // TODO
 }
 
-void ProcessIO_redirect_err(ProcessIO *pio, String *file_path) {
+void process_io_redirect_err(ProcessIO *pio, String *file_path) {
   // TODO
 }
 
-void ProcessIO_cleanup(ProcessIO *pio) {
+void process_io_cleanup(ProcessIO *pio) {
   // TODO
 }
