@@ -42,10 +42,11 @@ struct Environ {
   int tty_fdesc;
   String working_dir;
   String *env_vars;
-  Job *fg_jobs;
-  Job *bg_jobs;
+  Job *jobs;
+  Job *suspended_jobs;
   Arena *scratch;
 };
+
 
 Process *get_process_by_pid(Process *chain, pid_t pid) {
   for (Process *p = job->first_p; p != NULL; p = p->next)
@@ -70,8 +71,8 @@ Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
   env->working_dir = working_dir;
   env->env_vars = env_vars;
 
-  env->fg_jobs = NULL;
-  env->bg_jobs = NULL;
+  env->jobs = NULL;
+  env->suspended_jobs = NULL;
 
   env->scratch = arena_init(ARENA_INIT_SIZE_ENVIRON);
 
