@@ -20,8 +20,7 @@ struct Process {
   pid_t pgid;
   ProcessStatus state;
   ProcessIO *io;
-  String *cmd_path;
-  String *arguments;
+  Command *cmd;
   bool is_async;
   Process *next_p;
   Arena *scratch;
@@ -46,7 +45,6 @@ struct Environ {
   Job *suspended_jobs;
   Arena *scratch;
 };
-
 
 Process *get_process_by_pid(Process *chain, pid_t pid) {
   for (Process *p = job->first_p; p != NULL; p = p->next)
@@ -79,8 +77,7 @@ Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
   return env;
 }
 
-Process *append_process_to_chain(Process **chain, ProcessIO *io,
-                                 String *cmd_path, String *arguments,
+Process *append_process_to_chain(Process **chain, ProcessIO *io, Command *cmd,
                                  bool is_async, Arena *scratch) {
   Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
 
@@ -91,8 +88,8 @@ Process *append_process_to_chain(Process **chain, ProcessIO *io,
   }
 
   p->scratch = arena_init(ARENA_INIT_SIZE_PROCESS);
-  p->cmd_path = duplicate_string(cmd_path, p->scratch);
-  p->arguments = duplicate_string_list(arguments, p->scratch);
+
+  p->cmd = cmd;
   p->io = io;
   p->is_async = is_async;
   p->next_p = NULL;
@@ -120,6 +117,7 @@ Job *append_job_to_chain(Job **chain, int job_id, Arena *scratch) {
   }
 
   j->scratch = arena_init(ARENA_INIT_SIZE_JOB);
+
   j->job_id = job_id;
   j->first_p = NULL;
   j->next_j = NULL;
