@@ -15,6 +15,12 @@
 //=> alloc cbu_heap, cbu_alloc, cbu_realloc, cbu_dump
 //=> hashfunc cbu_heap_hashfn
 
+struct Command {
+  String *cmd;
+  String *args_chain;
+  size_t args_num;
+};
+
 struct Process {
   pid_t pid;
   pid_t pgid;
