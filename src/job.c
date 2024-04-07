@@ -21,21 +21,49 @@ struct Command {
   size_t args_num;
 };
 
+struct Redir {
+  enum RedirKind {
+    REDIR_IN,
+    REDIR_OUT,
+    REDIR_APPEND,
+    REDIR_HERE,
+    REDIR_DUP_IN,
+    REDIR_DUP_OUT,
+    REDIR_DUP_ERR,
+  } kind;
+
+  String *file_path;
+  String *here;
+  int dup_fd;
+
+  Redir *next;
+}
+
 struct Process {
   pid_t pid;
   pid_t pgid;
-  ProcessStatus state;
-  ProcessIO *io;
+  Redir *redirs;
   Command *cmd;
+  int fno_in, fno_out, fno_err;
   bool is_async;
   Process *next_p;
   Arena *scratch;
+
+  enum ProcessState {
+    PSTATE_PENDING,
+    PSTATE_RUNNING,
+    PSTATE_TERM,
+    PSTATE_STOP,
+    PSTATE_EXIT,
+  } state;
+
+  int state_code;
 };
 
 struct Job {
   int job_id;
   pid_t job_pgid;
-  JobStatus state;
+  Status state;
   struct termios tmodes;
   Process *first_p;
   Job *next_j;
@@ -83,8 +111,8 @@ Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
   return env;
 }
 
-Process *append_process_to_chain(Process **chain, ProcessIO *io, Command *cmd,
-                                 bool is_async, Arena *scratch) {
+Process *append_process_to_chain(Process **chain, bool is_async, Command *cmd,
+                                 Arena *scratch) {
   Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
 
   if (p == NULL) {
@@ -95,10 +123,17 @@ Process *append_process_to_chain(Process **chain, ProcessIO *io, Command *cmd,
 
   p->scratch = arena_init(ARENA_INIT_SIZE_PROCESS);
 
+  p->pid = -1;
+  p->pgid = -1;
   p->cmd = cmd;
-  p->io = io;
   p->is_async = is_async;
+  p->fno_in = STDIN_FILENO;
+  p->fno_out = STDOUT_FILENO;
+  p->fno_err = STDERR_FILENO;
+  p->state_code = -1;
+  p->state = PSTATE_PENDING;
   p->next_p = NULL;
+  p->redirs = NULL;
 
   if (*chain == NULL) {
     *chain = p;
@@ -138,4 +173,72 @@ Job *append_job_to_chain(Job **chain, int job_id, Arena *scratch) {
   chain_deref->next = j;
 
   return j;
+}
+
+void hook_redir(Redir *r) {
+  if (r == NULL)
+    return;
+
+  switch (r->kind) {
+  case REDIR_IN:
+    stdin = freopen(get_string_asciiz(r->file_path), "r", stdin);
+    if (stdin == NULL)
+      perror("freopen");
+    break;
+  case REDIR_OUT:
+    stdout = fropen(get_string_asciiz(r->file_path), "w", stdout);
+    if (stdout == NULL)
+      perror("freopen");
+    break;
+  case REDIR_APPEND:
+    stdout = fropen(get_string_asciiz(r->file_path), "a", stdout);
+    if (stdout == NULL)
+      perror("freopen");
+    break;
+  case REDIR_HERE:
+    int write =
+        fwrite(r->here_str->buf, r->here_str->len, sizeof(uint8_t), stdin);
+    if (write < 0)
+      perror("fwrite");
+    break;
+  case REDIR_DUP_IN:
+    int dup_res = dup2(STDIN_FILENO, r->dup_fd);
+    if (dup_res < 0)
+      perror("dup2");
+    break;
+  case REDIR_DUP_OUT:
+    int dup_res = dup2(STDOUT_FILENO, r->dup_fd);
+    if (dup_res < 0)
+      perror("dup2");
+    break;
+  case REDIR_DUP_ERR:
+    int dup_res = dup2(STDERR_FILENO, r->dup_fd);
+    if (dup_res < 0)
+      perror("dup2");
+    break;
+  default:
+    /* unreachable */
+    break;
+  }
+}
+
+void execute_process(Process *p) {
+  pid_t id;
+
+  if ((p->pid = id = fork()) < 0) {
+    perror("fork");
+    return;
+  }
+
+  if (p->pgid == -1)
+    p->pgid = getpgid(0);
+
+  if (id == 0) {
+    if (p->redirs != NULL)
+      for (Redir *r = p->redirs; r != NULL; r = r->next)
+        hook_redir(r);
+
+    exec_command(p->cmd);
+    perror("execvpe");
+  }
 }
