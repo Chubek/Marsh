@@ -38,12 +38,13 @@ struct Redir {
   int dup_fd;
 
   Redir *next;
-}
+};
 
 struct Process {
   pid_t pid;
   pid_t pgid;
   Redir *redirs;
+  FILE *redirect_stream;
   Command *cmd;
   int fno_in, fno_out, fno_err;
   bool is_async;
@@ -113,7 +114,7 @@ Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
 }
 
 Process *append_process_to_chain(Process **chain, bool is_async,
-                                 bool last_in_line, Command *cmd,
+                                 bool last_in_line, Redir *redirs, Command *cmd,
                                  Arena *scratch) {
   Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
 
@@ -128,6 +129,8 @@ Process *append_process_to_chain(Process **chain, bool is_async,
   p->pid = -1;
   p->pgid = -1;
   p->cmd = cmd;
+  p->redirs = redirs;
+  p->redirect_stream = NULL;
   p->is_async = is_async;
   p->last_in_line = last_in_line;
   p->fno_in = STDIN_FILENO;
@@ -136,7 +139,6 @@ Process *append_process_to_chain(Process **chain, bool is_async,
   p->state_code = -1;
   p->state = PSTATE_PENDING;
   p->next_p = NULL;
-  p->redirs = NULL;
 
   if (*chain == NULL) {
     *chain = p;
@@ -184,37 +186,37 @@ void hook_redir(Redir *r, Process *p) {
 
   switch (r->kind) {
   case REDIR_IN:
-    FILE *redirect =
+    p->redirect_stream =
         freopen(get_string_asciiz(r->file_path, p->scratch), "r", stdin);
-    if (redirect == NULL)
+    if (p->redirect_stream == NULL)
       system_error("freopen");
     if (r->target_fd == -1) {
-      stdin = redirect;
+      stdin = p->redirect_stream;
       p->fno_in = fileno(stdin);
     } else
-      dup2(fileno(redirect), r->target_fd);
+      dup2(fileno(p->redirect_stream), r->target_fd);
     break;
   case REDIR_OUT:
-    FILE *redirect =
+    p->redirect_stream =
         fropen(get_string_asciiz(r->file_path, p->scratch), "w", stdout);
-    if (redirect == NULL)
+    if (p->redirect_stream == NULL)
       system_error("freopen");
     if (r->target_fd == -1) {
-      stdout = redirect;
+      stdout = p->redirect_stream;
       p->fno_out = fileno(stdout);
     } else
-      dup2(fileno(redirect), r->target_fd);
+      dup2(fileno(p->redirect_stream), r->target_fd);
     break;
   case REDIR_APPEND:
-    FILE *redirect =
+    p->redirect_stream =
         fropen(get_string_asciiz(r->file_path, p->scratch), "a", stdout);
-    if (redirect == NULL)
+    if (p->redirect_stream == NULL)
       system_error("freopen");
     if (r->target_fd == -1) {
-      stdout = redirect;
+      stdout = p->redirect_stream;
       p->fno_out = fileno(stdout);
     } else
-      dup2(fileno(redirect), r->target_fd);
+      dup2(fileno(p->redirect_stream), r->target_fd);
     break;
     p->fno_out = fileno(stdout);
   case REDIR_HERE:
@@ -274,13 +276,6 @@ void execute_command(Command *cmd, Process *p) {
   execvpe(path, args, shell_env);
 }
 
-void execute_signal_handlers(void) {
-  SignalActions *sig_action = &signal_actions[0];
-  while (*sig_action++ != NULL)
-    if (sigaction(sig_action->signo, sig_action->handler, NULL) < 0)
-      system_error("sigaction");
-}
-
 void execute_redirs(Process *p) {
   if (p->redirs != NULL)
     for (Redir *r = p->redirs; r != NULL; r = r->next)
@@ -302,7 +297,6 @@ void execute_process(Process *p) {
     handle_pipe(p);
 
     execute_redirs();
-    execute_signal_handlers();
 
     execute_command(p->cmd);
     system_error("execvpe");
