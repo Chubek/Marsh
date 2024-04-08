@@ -188,7 +188,7 @@ void hook_redir(Redir *r, Process *p) {
     FILE *redirect =
         freopen(get_string_asciiz(r->file_path, p->scratch), "r", stdin);
     if (redirect == NULL)
-      perror("freopen");
+      system_error("freopen");
     if (r->target_fd == -1) {
       stdin = redirect;
       p->fno_in = fileno(stdin);
@@ -199,7 +199,7 @@ void hook_redir(Redir *r, Process *p) {
     FILE *redirect =
         fropen(get_string_asciiz(r->file_path, p->scratch), "w", stdout);
     if (redirect == NULL)
-      perror("freopen");
+      system_error("freopen");
     if (r->target_fd == -1) {
       stdout = redirect;
       p->fno_out = fileno(stdout);
@@ -210,7 +210,7 @@ void hook_redir(Redir *r, Process *p) {
     FILE *redirect =
         fropen(get_string_asciiz(r->file_path, p->scratch), "a", stdout);
     if (redirect == NULL)
-      perror("freopen");
+      system_error("freopen");
     if (r->target_fd == -1) {
       stdout = redirect;
       p->fno_out = fileno(stdout);
@@ -222,27 +222,27 @@ void hook_redir(Redir *r, Process *p) {
     int write =
         fwrite(r->here_str->buf, r->here_str->len, sizeof(uint8_t), stdin);
     if (write < 0)
-      perror("fwrite");
+      system_error("fwrite");
     break;
   case REDIR_DUP_IN:
     int dup_res = dup2(p->fno_in, r->dup_fd);
     if (dup_res < 0)
-      perror("dup2");
+      system_error("dup2");
     break;
   case REDIR_DUP_OUT:
     int dup_res = dup2(p->fno_out, r->dup_fd);
     if (dup_res < 0)
-      perror("dup2");
+      system_error("dup2");
     break;
   case REDIR_DUP_ERR:
     int dup_res = dup2(p->fno_err, r->dup_fd);
     if (dup_res < 0)
-      perror("dup2");
+      system_error("dup2");
     break;
   case REDIR_DUP_TARGET:
     int dup_res = dup2(p->fno_target, r->dup_fd);
     if (dup_res < 0)
-      perror("dup2");
+      system_error("dup2");
     break;
   default:
     /* unreachable */
@@ -253,14 +253,14 @@ void hook_redir(Redir *r, Process *p) {
 void handle_pipe(Process *p) {
   if (p->fno_in != STDIN_FILENO) {
     if (dup2(p->fno_in, STDIN_FILENO) < 0) {
-      perror("dup2");
+      system_error("dup2");
     }
     close(p->fno_in);
   }
 
   if (p->fno_out != STDOUT_FILENO) {
     if (dup2(p->fno_out, STDOUT_FILENO) < 0) {
-      perror("dup2");
+      system_error("dup2");
     }
 
     close(p->fno_out);
@@ -279,7 +279,7 @@ void execute_process(Process *p) {
   pid_t id;
 
   if ((p->pid = id = fork()) < 0) {
-    perror("fork");
+    system_error("fork");
     return;
   }
 
@@ -294,7 +294,7 @@ void execute_process(Process *p) {
         hook_redir(r, p);
 
     execute_command(p->cmd);
-    perror("execvpe");
+    system_error("execvpe");
   }
 
   if (p->fno_in != STDIN_FILENO)
@@ -310,7 +310,7 @@ void execute_job(Job *j) {
   for (Process *p = j->first_p; p != NULL; p = p->next_p) {
     if (p != j->first_p && !j->last_in_line) {
       if (pipe(pipe_chain) < 0)
-        perror("pipe");
+        system_error("pipe");
 
       if (p != j->first_p) {
         p->fno_in = dup(pipe_chain[0]);
