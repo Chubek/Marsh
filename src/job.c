@@ -34,6 +34,7 @@ struct Redir {
 
   String *file_path;
   String *here;
+  int target_fd;
   int dup_fd;
 
   Redir *next;
@@ -46,6 +47,7 @@ struct Process {
   Command *cmd;
   int fno_in, fno_out, fno_err;
   bool is_async;
+  bool last_in_line;
   Process *next_p;
   Arena *scratch;
 
@@ -175,26 +177,45 @@ Job *append_job_to_chain(Job **chain, int job_id, Arena *scratch) {
   return j;
 }
 
-void hook_redir(Redir *r) {
+void hook_redir(Redir *r, Process *p) {
   if (r == NULL)
     return;
 
   switch (r->kind) {
   case REDIR_IN:
-    stdin = freopen(get_string_asciiz(r->file_path), "r", stdin);
-    if (stdin == NULL)
+    FILE *redirect =
+        freopen(get_string_asciiz(r->file_path, p->scratch), "r", stdin);
+    if (redirect == NULL)
       perror("freopen");
+    if (r->target_fd == -1) {
+      stdin = redirect;
+      p->fno_in = fileno(stdin);
+    } else
+      dup2(fileno(redirect), r->target_fd);
     break;
   case REDIR_OUT:
-    stdout = fropen(get_string_asciiz(r->file_path), "w", stdout);
-    if (stdout == NULL)
+    FILE *redirect =
+        fropen(get_string_asciiz(r->file_path, p->scratch), "w", stdout);
+    if (redirect == NULL)
       perror("freopen");
+    if (r->target_fd == -1) {
+      stdout = redirect;
+      p->fno_out = fileno(stdout);
+    } else
+      dup2(fileno(redirect), r->target_fd);
     break;
   case REDIR_APPEND:
-    stdout = fropen(get_string_asciiz(r->file_path), "a", stdout);
-    if (stdout == NULL)
+    FILE *redirect =
+        fropen(get_string_asciiz(r->file_path, p->scratch), "a", stdout);
+    if (redirect == NULL)
       perror("freopen");
+    if (r->target_fd == -1) {
+      stdout = redirect;
+      p->fno_out = fileno(stdout);
+    } else
+      dup2(fileno(redirect), r->target_fd);
     break;
+    p->fno_out = fileno(stdout);
   case REDIR_HERE:
     int write =
         fwrite(r->here_str->buf, r->here_str->len, sizeof(uint8_t), stdin);
@@ -202,17 +223,22 @@ void hook_redir(Redir *r) {
       perror("fwrite");
     break;
   case REDIR_DUP_IN:
-    int dup_res = dup2(STDIN_FILENO, r->dup_fd);
+    int dup_res = dup2(p->fno_in, r->dup_fd);
     if (dup_res < 0)
       perror("dup2");
     break;
   case REDIR_DUP_OUT:
-    int dup_res = dup2(STDOUT_FILENO, r->dup_fd);
+    int dup_res = dup2(p->fno_out, r->dup_fd);
     if (dup_res < 0)
       perror("dup2");
     break;
   case REDIR_DUP_ERR:
-    int dup_res = dup2(STDERR_FILENO, r->dup_fd);
+    int dup_res = dup2(p->fno_err, r->dup_fd);
+    if (dup_res < 0)
+      perror("dup2");
+    break;
+  case REDIR_DUP_TARGET:
+    int dup_res = dup2(p->fno_target, r->dup_fd);
     if (dup_res < 0)
       perror("dup2");
     break;
@@ -220,6 +246,12 @@ void hook_redir(Redir *r) {
     /* unreachable */
     break;
   }
+}
+
+void handle_pipe(Process *p) {
+  if (p->fno_in != STDIN_FILENO)
+    if (dup2(p->fno_in, STDIN_FILENO) < 0)
+      perror("dup2");
 }
 
 void execute_process(Process *p) {
@@ -234,11 +266,37 @@ void execute_process(Process *p) {
     p->pgid = getpgid(0);
 
   if (id == 0) {
+    handle_pipe(p);
+
     if (p->redirs != NULL)
       for (Redir *r = p->redirs; r != NULL; r = r->next)
-        hook_redir(r);
+        hook_redir(r, p);
 
     exec_command(p->cmd);
     perror("execvpe");
+  }
+}
+
+void execute_job(Job *j) {
+  int pipe_chain[2];
+
+  for (Process *p = j->first_p; p != NULL; p = p->next_p) {
+    if (p != j->first_p && !j->last_in_line) {
+      if (pipe(pipe_chain) < 0)
+        perror("pipe");
+
+      if (p != j->first_p) {
+        p->fno_in = dup(pipe_chain[0]);
+        close(pipe_chain[0]);
+      }
+
+      if (!p->last_in_line) {
+        p->fno_out = dup(pipe_chain[1]);
+        close(pipe_chain[1]);
+      }
+    }
+
+    execute_process(p);
+    wait_for_process(p);
   }
 }
