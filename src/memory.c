@@ -160,8 +160,9 @@ uint8_t *string_to_asciiz(String *s, Arena *scratch) {
   return asciiz;
 }
 
-uint8_t **strings_to_asciiz_list(String *head, Arena *scratch) {
-  size_t num_str = get_num_strings(head);
+uint8_t **strings_to_nullterm_asciiz_list(String *head, size_t n,
+                                          Arena *scratch) {
+  size_t num_str = n > 0 ? n : get_num_strings(head);
   uint8_t **asciiz_list =
       (uint8_t **)arena_alloc(scratch, (num_str + 1) * sizeof(uint8_t *));
 
