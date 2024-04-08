@@ -123,7 +123,7 @@ Process *append_process_to_chain(Process **chain, bool is_async,
       return NULL;
   }
 
-  p->scratch = arena_init(ARENA_INIT_SIZE_PROCESS);
+  p->scratch = scratch;
 
   p->pid = -1;
   p->pgid = -1;
@@ -274,6 +274,19 @@ void execute_command(Command *cmd, Process *p) {
   execvpe(path, args, shell_env);
 }
 
+void execute_signal_handlers(void) {
+  SignalActions *sig_action = &signal_actions[0];
+  while (*sig_action++ != NULL)
+    if (sigaction(sig_action->signo, sig_action->handler, NULL) < 0)
+      system_error("sigaction");
+}
+
+void execute_redirs(Process *p) {
+  if (p->redirs != NULL)
+    for (Redir *r = p->redirs; r != NULL; r = r->next)
+      hook_redir(r, p);
+}
+
 void execute_process(Process *p) {
   pid_t id;
 
@@ -288,9 +301,8 @@ void execute_process(Process *p) {
   if (id == 0) {
     handle_pipe(p);
 
-    if (p->redirs != NULL)
-      for (Redir *r = p->redirs; r != NULL; r = r->next)
-        hook_redir(r, p);
+    execute_redirs();
+    execute_signal_handlers();
 
     execute_command(p->cmd);
     system_error("execvpe");
@@ -301,6 +313,10 @@ void execute_process(Process *p) {
 
   if (p->fno_out != STDOUT_FILENO)
     close(p->fno_out);
+}
+
+void wait_for_process(Process *p) {
+  // wait for process, and stet p->state and p->state_code
 }
 
 void execute_job(Job *j) {
