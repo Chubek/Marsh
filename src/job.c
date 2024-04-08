@@ -66,7 +66,6 @@ struct Job {
   int job_id;
   pid_t job_pgid;
   Status state;
-  struct termios tmodes;
   Process *first_p;
   Job *next_j;
   Arena *scratch;
@@ -323,7 +322,29 @@ void execute_job(Job *j) {
       }
     }
 
+    if (j->job_pgid != -1)
+      p->pgid = j->job_pgdid;
+
     execute_process(p);
+
+    if (p == j->first_p)
+      j->job_pgid = p->pgid;
+
     wait_for_process(p);
   }
+}
+
+void disable_raw_mode(struct termios tmode) {
+  tcsetattr(STDIN_FILENO, TCSAFLUSH, &tmode);
+}
+
+void enable_raw_mode(struct termios tmode) {
+  struct termios raw;
+
+  tcgetattr(STDIN_FILENO, &tmode);
+  atexit(disableRawMode);
+
+  raw = tmode;
+  raw.c_lflag &= ~(ECHO | ICANON);
+  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
 }
