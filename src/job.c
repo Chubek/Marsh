@@ -113,7 +113,8 @@ Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
   return env;
 }
 
-Process *append_process_to_chain(Process **chain, bool is_async, Command *cmd,
+Process *append_process_to_chain(Process **chain, bool is_async,
+                                 bool last_in_line, Command *cmd,
                                  Arena *scratch) {
   Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
 
@@ -129,6 +130,7 @@ Process *append_process_to_chain(Process **chain, bool is_async, Command *cmd,
   p->pgid = -1;
   p->cmd = cmd;
   p->is_async = is_async;
+  p->last_in_line = last_in_line;
   p->fno_in = STDIN_FILENO;
   p->fno_out = STDOUT_FILENO;
   p->fno_err = STDERR_FILENO;
@@ -249,9 +251,28 @@ void hook_redir(Redir *r, Process *p) {
 }
 
 void handle_pipe(Process *p) {
-  if (p->fno_in != STDIN_FILENO)
-    if (dup2(p->fno_in, STDIN_FILENO) < 0)
+  if (p->fno_in != STDIN_FILENO) {
+    if (dup2(p->fno_in, STDIN_FILENO) < 0) {
       perror("dup2");
+    }
+    close(p->fno_in);
+  }
+
+  if (p->fno_out != STDOUT_FILENO) {
+    if (dup2(p->fno_out, STDOUT_FILENO) < 0) {
+      perror("dup2");
+    }
+
+    close(p->fno_out);
+  }
+}
+
+void execute_command(Command *cmd, Process *p) {
+  char *path = string_to_asciiz(cmd->cmd, p->scratch);
+  char **args =
+      strings_to_nullterm_asciiz(cmd->args_chain, cmd->num_args, p->scratch);
+
+  execvpe(path, args, shell_env);
 }
 
 void execute_process(Process *p) {
@@ -272,9 +293,15 @@ void execute_process(Process *p) {
       for (Redir *r = p->redirs; r != NULL; r = r->next)
         hook_redir(r, p);
 
-    exec_command(p->cmd);
+    execute_command(p->cmd);
     perror("execvpe");
   }
+
+  if (p->fno_in != STDIN_FILENO)
+    close(p->fno_in);
+
+  if (p->fno_out != STDOUT_FILENO)
+    close(p->fno_out);
 }
 
 void execute_job(Job *j) {
