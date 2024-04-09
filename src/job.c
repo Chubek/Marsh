@@ -273,7 +273,8 @@ void execute_command(Command *cmd, Process *p) {
   char **args =
       strings_to_nullterm_asciiz(cmd->args_chain, cmd->num_args, p->scratch);
 
-  execvpe(path, args, shell_env);
+  resolve_path(path, shell_env);
+  execle(path, args, shell_env);
 }
 
 void execute_redirs(Process *p) {
@@ -299,7 +300,7 @@ void execute_process(Process *p) {
     execute_redirs();
 
     execute_command(p->cmd);
-    system_error("execvpe");
+    system_error("execle");
   }
 
   if (p->fno_in != STDIN_FILENO)
