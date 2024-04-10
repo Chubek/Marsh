@@ -295,6 +295,8 @@ void execute_process(Process *p) {
     p->pgid = getpgid(0);
 
   if (id == 0) {
+    setpgid(p->pgid);
+
     handle_pipe(p);
 
     execute_redirs();
@@ -338,7 +340,7 @@ void execute_job(Job *j) {
 
     execute_process(p);
 
-    if (p == j->first_p)
+    if (p == j->first_p && p->pgid != -1)
       j->job_pgid = p->pgid;
 
     wait_for_process(p);
