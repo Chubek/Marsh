@@ -1,5 +1,5 @@
 command = Simple(identifier name, argument* args, redirection* redirects, environment* env)
-        | Pipeline(command* commands, boolean background)
+        | Pipeline(command* commands, bool background)
         | Subshell(command command, redirection* redirects)
         | Conditional(command condition, command then_branch, command? else_branch)
         | CommandList(command* commands)
