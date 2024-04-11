@@ -45,7 +45,6 @@ struct Process {
   Command *cmd;
   int fno_in, fno_out, fno_err;
   bool is_async;
-  bool last_in_line;
   Process *next_p;
   Arena *scratch;
 
@@ -110,9 +109,8 @@ Environ *init_environ(Environ *env, int tty_fdesc, String working_dir,
   return env;
 }
 
-Process *append_process_to_chain(Process **chain, bool is_async,
-                                 bool last_in_line, Redir *redirs, Command *cmd,
-                                 Arena *scratch) {
+Process *append_process_to_chain(Process **chain, bool is_async, Redir *redirs,
+                                 Command *cmd, Arena *scratch) {
   Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
 
   if (p == NULL) {
@@ -238,17 +236,14 @@ void hook_redir(Redir *r, Process *p) {
 
 void handle_pipe(Process *p) {
   if (p->fno_in != STDIN_FILENO) {
-    if (dup2(p->fno_in, STDIN_FILENO) < 0) {
+    if (dup2(p->fno_in, STDIN_FILENO) < 0)
       system_error("dup2");
-    }
     close(p->fno_in);
   }
 
   if (p->fno_out != STDOUT_FILENO) {
-    if (dup2(p->fno_out, STDOUT_FILENO) < 0) {
+    if (dup2(p->fno_out, STDOUT_FILENO) < 0)
       system_error("dup2");
-    }
-
     close(p->fno_out);
   }
 }
@@ -303,59 +298,65 @@ void wait_for_process(Process *p) {
 
 void execute_job(Job *j) {
   int pipe_chain[2];
+  int prev_in = -1;
 
   for (Process *p = j->first_p; p != NULL; p = p->next_p) {
-    if (p != j->first_p && !j->last_in_line) {
-      if (pipe(pipe_chain) < 0)
-        system_error("pipe");
-
-      if (p != j->first_p) {
-        p->fno_in = dup(pipe_chain[0]);
+    if (p != j->first_p && j->next_p != NULL) {
+      if (p->next_p != NULL) {
+        if (pipe(pipe_chain) < 0)
+          system_error("pipe");
+        if (dup2(pipe_chain[0], prev_in) < 0)
+          system_error("dup2");
         close(pipe_chain[0]);
       }
 
-      if (!p->last_in_line) {
-        p->fno_out = dup(pipe_chain[1]);
+      if (p != j->first_p && prev_in != -1)
+        p->fno_in = prev_in;
+      else
+        p->fno_in = STDIN_FILENO;
+
+      if (p->next_p != NULL) {
+        p->fno_out = prev_in = dup(pipe_chain[1]);
         close(pipe_chain[1]);
-      }
+      } else
+        p->fno_out = STDOUT_FILENO;
+
+      if (j->job_pgid != -1)
+        p->pgid = j->job_pgdid;
+
+      execute_process(p);
+
+      if (p == j->first_p && p->pgid != -1)
+        j->job_pgid = p->pgid;
+
+      wait_for_process(p)
     }
-
-    if (j->job_pgid != -1)
-      p->pgid = j->job_pgdid;
-
-    execute_process(p);
-
-    if (p == j->first_p && p->pgid != -1)
-      j->job_pgid = p->pgid;
-
-    wait_for_process(p);
   }
-}
 
-void disable_raw_mode(struct termios tmode) {
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &tmode);
-}
+  void disable_raw_mode(struct termios tmode) {
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &tmode);
+  }
 
-void enable_raw_mode(struct termios tmode) {
-  struct termios raw;
+  void enable_raw_mode(struct termios tmode) {
+    struct termios raw;
 
-  tcgetattr(STDIN_FILENO, &tmode);
-  atexit(disableRawMode);
+    tcgetattr(STDIN_FILENO, &tmode);
+    atexit(disableRawMode);
 
-  raw = tmode;
-  raw.c_lflag &= ~(ECHO | ICANON);
-  tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
-}
+    raw = tmode;
+    raw.c_lflag &= ~(ECHO | ICANON);
+    tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+  }
 
-void sigint_handler(int sig) {
-  // CTRL+D
-}
+  void sigint_handler(int sig) {
+    // CTRL+D
+  }
 
-void sigtstp_handler(int sig) {
-  // CTRL+Z
-}
+  void sigtstp_handler(int sig) {
+    // CTRL+Z
+  }
 
-void sigchld_handler(int sig) {
-  while (waitpid(-1, NULL, WNOHANG) > 0)
-    ;
-}
+  void sigchld_handler(int sig) {
+    while (waitpid(-1, NULL, WNOHANG) > 0)
+      ;
+  }
