@@ -8,7 +8,7 @@ command = Simple(identifier name, argument* args, redirection* redirects, enviro
         | ForLoop(identifier variable, argument* values, command body)
         | WhileLoop(command condition, command body)
         | UntilLoop(command condition, command body)
-        | Case(command word, case_clause* clauses)
+        | Cases(command word, case_clause* clauses)
         | FunctionDefinition(identifier name, command body, redirection* redirects)
         ;
 
