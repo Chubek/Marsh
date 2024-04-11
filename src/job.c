@@ -12,7 +12,7 @@
 
 #include "marsh.h"
 
-#define STAT_CREATE S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH
+#define NEW_FILE_STAT S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH
 
 struct Command {
   String *cmd;
@@ -187,20 +187,20 @@ void hook_redir(Redir *r, Process *p) {
       perror("open");
       exit(EXIT_FAILURE);
     }
-    if (dup2(fd, STDIN_FILENO) < 0) {
+    if (dup2(fd, p->fno_in) < 0) {
       perror("dup2");
       exit(EXIT_FAILURE);
     }
-    close(fd); // Close the original file descriptor after duplication
+    close(fd);
     break;
   case REDIR_OUT:
     fd = open(get_string_asciiz(r->file_path, p->scratch),
-              O_WRONLY | O_CREAT | O_TRUNC, STAT_CREATE);
+              O_WRONLY | O_CREAT | O_TRUNC, NEW_FILE_STAT);
     if (fd < 0) {
       perror("open");
       exit(EXIT_FAILURE);
     }
-    if (dup2(fd, STDOUT_FILENO) < 0) {
+    if (dup2(fd, p->fno_out) < 0) {
       perror("dup2");
       exit(EXIT_FAILURE);
     }
@@ -208,12 +208,12 @@ void hook_redir(Redir *r, Process *p) {
     break;
   case REDIR_APPEND:
     fd = open(get_string_asciiz(r->file_path, p->scratch),
-              O_WRONLY | O_CREAT | O_APPEND, STAT_CREATE);
+              O_WRONLY | O_CREAT | O_APPEND, NEW_FILE_STAT);
     if (fd < 0) {
       perror("open");
       exit(EXIT_FAILURE);
     }
-    if (dup2(fd, STDOUT_FILENO) < 0) {
+    if (dup2(fd, p->fno_out) < 0) {
       perror("dup2");
       exit(EXIT_FAILURE);
     }
@@ -226,7 +226,15 @@ void hook_redir(Redir *r, Process *p) {
     }
     break;
   case REDIR_HERE:
-    // TODO: Implement
+    int here_pipe[2];
+    if (pipe(here_pipe) < 0)
+      system_error("pipe");
+    if (write(here_pipe[1], r->here->buf, r->here->len) < 0)
+      system_error("write");
+    if (dup2(fd, p->fno_in) < 0)
+      system_error("dup2");
+    close(here_pipe[0]);
+    close(here_pipe[1]);
     break;
   default:
     fprintf(stderr, "Unknown redirection kind.\n");
