@@ -12,8 +12,7 @@
 
 #include "marsh.h"
 
-//=> alloc cbu_heap, cbu_alloc, cbu_realloc, cbu_dump
-//=> hashfunc cbu_heap_hashfn
+#define STAT_CREATE S_IRUSR | S_IWUSR | S_IRGRP | S_IWGRP | S_IROTH | S_IWOTH
 
 struct Command {
   String *cmd;
@@ -27,9 +26,7 @@ struct Redir {
     REDIR_OUT,
     REDIR_APPEND,
     REDIR_HERE,
-    REDIR_DUP_IN,
-    REDIR_DUP_OUT,
-    REDIR_DUP_ERR,
+    REDIR_DUP,
   } kind;
 
   String *file_path;
@@ -119,7 +116,7 @@ Process *append_process_to_chain(Process **chain, bool is_async,
   Process *p = (Process *)arena_alloc(scratch, sizeof(Process));
 
   if (p == NULL) {
-    p = (Process *)cbu_alloc(sizeof(Process));
+    p = (Process *)backup_alloc(sizeof(Process));
     if (p == NULL)
       return NULL;
   }
@@ -157,7 +154,7 @@ Job *append_job_to_chain(Job **chain, int job_id, Arena *scratch) {
   Job *j = (Job *)arena_alloc(scratch, sizeof(Job));
 
   if (j == NULL) {
-    j = (Job *)cbu_alloc(sizeof(Job));
+    j = (Job *)backup_alloc(sizeof(Job));
     if (j == NULL)
       return NULL;
   }
@@ -181,73 +178,61 @@ Job *append_job_to_chain(Job **chain, int job_id, Arena *scratch) {
 }
 
 void hook_redir(Redir *r, Process *p) {
-  if (r == NULL)
+  if (r == NULL || p == NULL)
     return;
 
+  int fd; // File descriptor for the opened file
   switch (r->kind) {
   case REDIR_IN:
-    p->redirect_stream =
-        freopen(get_string_asciiz(r->file_path, p->scratch), "r", stdin);
-    if (p->redirect_stream == NULL)
-      system_error("freopen");
-    if (r->target_fd == -1) {
-      stdin = p->redirect_stream;
-      p->fno_in = fileno(stdin);
-    } else
-      dup2(fileno(p->redirect_stream), r->target_fd);
+    fd = open(get_string_asciiz(r->file_path, p->scratch), O_RDONLY);
+    if (fd < 0) {
+      perror("open");
+      exit(EXIT_FAILURE);
+    }
+    if (dup2(fd, STDIN_FILENO) < 0) {
+      perror("dup2");
+      exit(EXIT_FAILURE);
+    }
+    close(fd); // Close the original file descriptor after duplication
     break;
   case REDIR_OUT:
-    p->redirect_stream =
-        fropen(get_string_asciiz(r->file_path, p->scratch), "w", stdout);
-    if (p->redirect_stream == NULL)
-      system_error("freopen");
-    if (r->target_fd == -1) {
-      stdout = p->redirect_stream;
-      p->fno_out = fileno(stdout);
-    } else
-      dup2(fileno(p->redirect_stream), r->target_fd);
+    fd = open(get_string_asciiz(r->file_path, p->scratch),
+              O_WRONLY | O_CREAT | O_TRUNC, STAT_CREATE);
+    if (fd < 0) {
+      perror("open");
+      exit(EXIT_FAILURE);
+    }
+    if (dup2(fd, STDOUT_FILENO) < 0) {
+      perror("dup2");
+      exit(EXIT_FAILURE);
+    }
+    close(fd);
     break;
   case REDIR_APPEND:
-    p->redirect_stream =
-        fropen(get_string_asciiz(r->file_path, p->scratch), "a", stdout);
-    if (p->redirect_stream == NULL)
-      system_error("freopen");
-    if (r->target_fd == -1) {
-      stdout = p->redirect_stream;
-      p->fno_out = fileno(stdout);
-    } else
-      dup2(fileno(p->redirect_stream), r->target_fd);
+    fd = open(get_string_asciiz(r->file_path, p->scratch),
+              O_WRONLY | O_CREAT | O_APPEND, STAT_CREATE);
+    if (fd < 0) {
+      perror("open");
+      exit(EXIT_FAILURE);
+    }
+    if (dup2(fd, STDOUT_FILENO) < 0) {
+      perror("dup2");
+      exit(EXIT_FAILURE);
+    }
+    close(fd);
     break;
-    p->fno_out = fileno(stdout);
+  case REDIR_DUP:
+    if (dup2(r->dup_fd, r->target_fd) < 0) {
+      perror("dup2");
+      exit(EXIT_FAILURE);
+    }
+    break;
   case REDIR_HERE:
-    int write =
-        fwrite(r->here_str->buf, r->here_str->len, sizeof(uint8_t), stdin);
-    if (write < 0)
-      system_error("fwrite");
-    break;
-  case REDIR_DUP_IN:
-    int dup_res = dup2(p->fno_in, r->dup_fd);
-    if (dup_res < 0)
-      system_error("dup2");
-    break;
-  case REDIR_DUP_OUT:
-    int dup_res = dup2(p->fno_out, r->dup_fd);
-    if (dup_res < 0)
-      system_error("dup2");
-    break;
-  case REDIR_DUP_ERR:
-    int dup_res = dup2(p->fno_err, r->dup_fd);
-    if (dup_res < 0)
-      system_error("dup2");
-    break;
-  case REDIR_DUP_TARGET:
-    int dup_res = dup2(p->fno_target, r->dup_fd);
-    if (dup_res < 0)
-      system_error("dup2");
+    // TODO: Implement
     break;
   default:
-    /* unreachable */
-    break;
+    fprintf(stderr, "Unknown redirection kind.\n");
+    exit(EXIT_FAILURE);
   }
 }
 
@@ -360,4 +345,17 @@ void enable_raw_mode(struct termios tmode) {
   raw = tmode;
   raw.c_lflag &= ~(ECHO | ICANON);
   tcsetattr(STDIN_FILENO, TCSAFLUSH, &raw);
+}
+
+void sigint_handler(int sig) {
+  // CTRL+D
+}
+
+void sigtstp_handler(int sig) {
+  // CTRL+Z
+}
+
+void sigchld_handler(int sig) {
+  while (waitpid(-1, NULL, WNOHANG) > 0)
+    ;
 }
