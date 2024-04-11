@@ -55,3 +55,7 @@ parse.h
 *.syngen.*
 *-syngen.*
 
+
+# Explicit Shell tree file
+marsh-tree.h
+marsh-tree.c
