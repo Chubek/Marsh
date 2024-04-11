@@ -14,7 +14,7 @@ command = Simple(identifier name, argument* args, redirection* redirects, enviro
 
 logical_operator = And | Or ;
 
-argument = Literal(string literal)
+argument = Literal(string literal_arg)
          | VariableExpansion(identifier expansion)
          | CommandSubstitution(command command)
          | ArithmeticExpansion(string expression)
@@ -35,7 +35,7 @@ case_clause = CaseClause(shell_pattern pattern, command action)
 
 shell_pattern = Wildcard(string wildcard)
               | CharacterClass(string characters)
-              | Literal(string value)
+              | LiteralText(string value)
               | Sequence(shell_pattern* patterns)
               | Alternation(shell_pattern* alternatives)
               ;
