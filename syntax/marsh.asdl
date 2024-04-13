@@ -1,47 +1,12 @@
-command = Simple(identifier name, argument* args, redirection* redirects, environment* env)
-        | Pipeline(command* commands, bool background)
-        | Subshell(command command, redirection* redirects)
-        | Conditional(command condition, command then_branch, command? else_branch)
-        | CommandList(command* commands)
-        | AndOr(command left, logical_operator operator, command right)
-        | BraceGroup(command* commands)
-        | ForLoop(identifier variable, argument* values, command body)
-        | WhileLoop(command condition, command body)
-        | UntilLoop(command condition, command body)
-        | Cases(command word, case_clause* clauses)
-        | FunctionDefinition(identifier name, command body, redirection* redirects)
-        ;
-
-logical_operator = And | Or ;
-
-argument = Literal(string literal_arg)
-         | VariableExpansion(identifier expansion)
-         | CommandSubstitution(command command)
-         | ArithmeticExpansion(string expression)
-         | WordExpansion(string pattern)
-         ;
-
-redirection = Redirection(string type, int? fd, string target)
-            ;
-
-environment = Environment(variable_assignment* assignments)
-            ;
-
-variable_assignment = VariableAssignment(identifier var, string value)
-                    ;
-
-case_clause = CaseClause(shell_pattern pattern, command action)
-            ;
-
-shell_pattern = Wildcard(string wildcard)
-              | CharacterClass(string characters)
-              | LiteralText(string value)
-              | Sequence(shell_pattern* patterns)
-              | Alternation(shell_pattern* alternatives)
-              ;
-
-redirection_type = RedirectInput | RedirectOutput | RedirectOutputAppend | HereDocument
-                  | RedirectInputAndOutput | RedirectOutputClobber
-		  | RedirectDupIn | RedirectDupOut | RedirectDupErr
-                  ;
-
+command ::= SimpleCommand(word lead, word_list args, redirection_list? redirs)
+	 | Pipeline(command_list list, bool async)
+	 | CompoundList(command_list list, separator sep)
+	 | Subshell(command_list commands)
+	 | BraceGroup(command_list commands)
+	 | ForLoop(identifier name, word_list words, command_list body)
+	 | WhileLoop(command_list cond, command_list body)
+	 | UntilLoop(command_list cond, command_list body)
+	 | CaseCond(word init_word, pattern_command_pair* pairs)
+	 | IfCond(cond_clause main_cond, cond_clause_list? elif_conds, command_list? else_body)
+	 | Function(command_list body, redirection_list? redirs)
+	 ;
