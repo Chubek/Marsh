@@ -127,7 +127,6 @@ Process *append_process_to_chain(Process **chain, bool is_async, Redir *redirs,
   p->redirs = redirs;
   p->redirect_stream = NULL;
   p->is_async = is_async;
-  p->last_in_line = last_in_line;
   p->fno_in = STDIN_FILENO;
   p->fno_out = STDOUT_FILENO;
   p->fno_err = STDERR_FILENO;
